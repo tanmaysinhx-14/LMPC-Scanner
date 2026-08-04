@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CivicConnect - Crowdsourced Civic Issue Reporting & Resolution Platform">
+    <meta name="theme-color" content="#4F46E5">
+    
+    <title>CivicConnect - Report & Track Civic Issues</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Main Styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- ============================================
+    LANDING PAGE - CivicConnect
+    ============================================ -->
+
+    <!-- ===== NAVBAR ===== -->
+    <nav id="landingNavbar" class="navbar" role="navigation" aria-label="Main navigation">
+        <div class="container-fluid d-flex align-center justify-between">
+            <!-- Brand -->
+            <a href="index.html" id="brandLink" class="navbar-brand" aria-label="CivicConnect Home">
+                <span class="brand-icon" aria-hidden="true">
+                    <i class="fas fa-city"></i>
+                </span>
+                <span class="brand-text">CivicConnect</span>
+            </a>
+            
+            <!-- Nav Links with Animated Underline -->
+            <ul class="nav-menu" id="navLinks">
+                <li><a href="#features" class="nav-link active">Features</a></li>
+                <li><a href="#how-it-works" class="nav-link">How It Works</a></li>
+                <li><a href="#testimonials" class="nav-link">Testimonials</a></li>
+            </ul>
+            
+            <!-- Actions -->
+            <div class="navbar-actions">
+                <button 
+                    id="themeToggleBtn" 
+                    class="theme-toggle" 
+                    aria-label="Toggle theme"
+                    title="Toggle dark/light mode"
+                    data-theme-toggle>
+                    <i class="fas fa-moon" id="themeIcon"></i>
+                </button>
+                
+                <!-- Get Started Dropdown -->
+                <div class="dropdown" id="getStartedDropdownContainer">
+                    <button 
+                        id="getStartedDropdownBtn" 
+                        class="btn btn-primary" 
+                        onclick="toggleGetStartedDropdown(event)"
+                        aria-expanded="false"
+                        aria-haspopup="true">
+                        Get Started
+                        <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                    </button>
+                    <div id="getStartedDropdown" class="dropdown-menu" role="menu">
+                        <a href="pages/auth/register.html" class="dropdown-item" role="menuitem">
+                            <i class="fas fa-user-plus" aria-hidden="true"></i>
+                            Sign Up
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a href="pages/auth/login.html" class="dropdown-item" role="menuitem">
+                            <i class="fas fa-sign-in-alt" aria-hidden="true"></i>
+                            Log In
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ===== HERO SECTION ===== -->
+    <section id="heroSection" class="hero-section" aria-labelledby="heroTitle">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <span class="hero-badge animate-fade-in-up">
+                        <i class="fas fa-sparkles" aria-hidden="true"></i>
+                        Smart City Solution
+                    </span>
+                    
+                    <h1 id="heroTitle" class="hero-title animate-fade-in-up" style="animation-delay: 0.1s;">
+                        Report &amp; Track
+                        <span class="gradient-primary">Civic Issues</span>
+                        in Your Community
+                    </h1>
+                    
+                    <p class="hero-description animate-fade-in-up" style="animation-delay: 0.2s;">
+                        CivicConnect empowers citizens to report potholes, broken streetlights, 
+                        water leakage, and garbage issues. Track progress in real-time and 
+                        help build smarter cities together.
+                    </p>
+                    
+                    <div class="hero-actions animate-fade-in-up" style="animation-delay: 0.3s;">
+                        <a href="pages/auth/register.html" id="heroGetStartedBtn" class="btn btn-primary btn-lg">
+                            <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                            Get Started
+                        </a>
+                        <a href="#how-it-works" id="heroLearnMoreBtn" class="btn btn-secondary btn-lg">
+                            <i class="fas fa-play-circle" aria-hidden="true"></i>
+                            Learn More
+                        </a>
+                    </div>
+                    
+                    <div class="hero-stats animate-fade-in-up" style="animation-delay: 0.4s;">
+                        <div class="hero-stat">
+                            <span class="hero-stat-number">12K+</span>
+                            <span class="hero-stat-label">Issues Reported</span>
+                        </div>
+                        <div class="hero-stat-divider"></div>
+                        <div class="hero-stat">
+                            <span class="hero-stat-number">8.5K</span>
+                            <span class="hero-stat-label">Issues Resolved</span>
+                        </div>
+                        <div class="hero-stat-divider"></div>
+                        <div class="hero-stat">
+                            <span class="hero-stat-number">94%</span>
+                            <span class="hero-stat-label">Satisfaction Rate</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="hero-visual animate-fade-in" style="animation-delay: 0.3s;">
+                    <div class="hero-dashboard-preview">
+                        <div class="preview-card">
+                            <div class="preview-header">
+                                <span class="preview-dot red"></span>
+                                <span class="preview-dot yellow"></span>
+                                <span class="preview-dot green"></span>
+                                <span class="preview-title">Issue Dashboard</span>
+                            </div>
+                            <div class="preview-body">
+                                <div class="preview-stat">
+                                    <span class="preview-stat-value">24</span>
+                                    <span class="preview-stat-label">Open Issues</span>
+                                </div>
+                                <div class="preview-stat">
+                                    <span class="preview-stat-value">12</span>
+                                    <span class="preview-stat-label">In Progress</span>
+                                </div>
+                                <div class="preview-stat">
+                                    <span class="preview-stat-value">8</span>
+                                    <span class="preview-stat-label">Resolved</span>
+                                </div>
+                            </div>
+                            <div class="preview-map">
+                                <div class="map-marker"></div>
+                                <div class="map-marker" style="top: 40%; left: 60%;"></div>
+                                <div class="map-marker" style="top: 70%; left: 30%;"></div>
+                                <div class="map-marker" style="top: 30%; left: 80%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== FEATURES SECTION ===== -->
+    <section id="features" class="features-section" aria-labelledby="featuresTitle">
+        <div class="container">
+            <div class="section-header text-center">
+                <span class="section-badge">Features</span>
+                <h2 id="featuresTitle" class="section-title">
+                    Everything You Need to
+                    <span class="gradient-primary">Improve Your City</span>
+                </h2>
+                <p class="section-description">
+                    Powerful tools for citizens, authorities, and administrators to work together
+                </p>
+            </div>
+            
+            <div class="features-grid stagger-children">
+                <!-- Feature 1 -->
+                <div class="feature-card card card-glass">
+                    <div class="feature-icon">
+                        <i class="fas fa-camera" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="feature-title">AI-Powered Reporting</h3>
+                    <p class="feature-description">
+                        Snap a photo and our AI automatically categorizes the issue. 
+                        No manual labeling required.
+                    </p>
+                </div>
+                
+                <!-- Feature 2 -->
+                <div class="feature-card card card-glass">
+                    <div class="feature-icon">
+                        <i class="fas fa-location-dot" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="feature-title">Real-Time Tracking</h3>
+                    <p class="feature-description">
+                        GPS-enabled location tracking. See reported issues on an 
+                        interactive map with live status updates.
+                    </p>
+                </div>
+                
+                <!-- Feature 3 -->
+                <div class="feature-card card card-glass">
+                    <div class="feature-icon">
+                        <i class="fas fa-bolt" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="feature-title">Smart Prioritization</h3>
+                    <p class="feature-description">
+                        AI assigns priority levels based on severity, location, 
+                        and impact to ensure urgent issues are addressed first.
+                    </p>
+                </div>
+                
+                <!-- Feature 4 -->
+                <div class="feature-card card card-glass">
+                    <div class="feature-icon">
+                        <i class="fas fa-users" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="feature-title">Crowdsourced Transparency</h3>
+                    <p class="feature-description">
+                        Upvote issues, add comments, and see what your community 
+                        cares about most.
+                    </p>
+                </div>
+                
+                <!-- Feature 5 -->
+                <div class="feature-card card card-glass">
+                    <div class="feature-icon">
+                        <i class="fas fa-bell" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="feature-title">Instant Notifications</h3>
+                    <p class="feature-description">
+                        Get notified when your issue is assigned, in progress, 
+                        or resolved. Real-time updates via email and in-app.
+                    </p>
+                </div>
+                
+                <!-- Feature 6 -->
+                <div class="feature-card card card-glass">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-line" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="feature-title">Data Insights</h3>
+                    <p class="feature-description">
+                        Analytics dashboards help municipalities identify patterns, 
+                        allocate resources, and improve city planning.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== HOW IT WORKS SECTION ===== -->
+    <section id="how-it-works" class="how-it-works-section" aria-labelledby="howItWorksTitle">
+        <div class="container">
+            <div class="section-header text-center">
+                <span class="section-badge">How It Works</span>
+                <h2 id="howItWorksTitle" class="section-title">
+                    Simple <span class="gradient-primary">3-Step</span> Process
+                </h2>
+                <p class="section-description">
+                    From reporting to resolution — transparent and efficient
+                </p>
+            </div>
+            
+            <div class="steps-grid">
+                <!-- Step 1 -->
+                <div class="step-card animate-fade-in-up" style="animation-delay: 0.1s;">
+                    <div class="step-number">1</div>
+                    <div class="step-icon">
+                        <i class="fas fa-upload" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="step-title">Report Issue</h3>
+                    <p class="step-description">
+                        Snap a photo, add location via GPS, and submit a brief description. 
+                        AI auto-categorizes your issue.
+                    </p>
+                </div>
+                
+                <!-- Step 2 -->
+                <div class="step-card animate-fade-in-up" style="animation-delay: 0.2s;">
+                    <div class="step-number">2</div>
+                    <div class="step-icon">
+                        <i class="fas fa-tasks" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="step-title">Authority Takes Action</h3>
+                    <p class="step-description">
+                        Municipal authorities prioritize, assign to relevant departments, 
+                        and update status in real-time.
+                    </p>
+                </div>
+                
+                <!-- Step 3 -->
+                <div class="step-card animate-fade-in-up" style="animation-delay: 0.3s;">
+                    <div class="step-number">3</div>
+                    <div class="step-icon">
+                        <i class="fas fa-check-circle" aria-hidden="true"></i>
+                    </div>
+                    <h3 class="step-title">Get Notified</h3>
+                    <p class="step-description">
+                        Receive instant notifications when your issue is resolved. 
+                        Rate the resolution and give feedback.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== TESTIMONIALS SECTION ===== -->
+    <section id="testimonials" class="testimonials-section" aria-labelledby="testimonialsTitle">
+        <div class="container">
+            <div class="section-header text-center">
+                <span class="section-badge">Testimonials</span>
+                <h2 id="testimonialsTitle" class="section-title">
+                    What People Are <span class="gradient-primary">Saying</span>
+                </h2>
+                <p class="section-description">
+                    Join thousands of satisfied citizens using CivicConnect
+                </p>
+            </div>
+            
+            <div class="testimonials-grid stagger-children">
+                <div class="testimonial-card card card-glass">
+                    <div class="testimonial-rating">
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                    </div>
+                    <p class="testimonial-text">
+                        "I reported a pothole on my street and it was fixed within 3 days! 
+                        The AI categorization was spot on and I loved getting updates."
+                    </p>
+                    <div class="testimonial-author">
+                        <div class="avatar">AK</div>
+                        <div>
+                            <div class="testimonial-name">Amit Kumar</div>
+                            <div class="testimonial-role">Resident, Delhi</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="testimonial-card card card-glass">
+                    <div class="testimonial-rating">
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                    </div>
+                    <p class="testimonial-text">
+                        "As a municipal officer, CivicConnect has revolutionized how we 
+                        track and resolve complaints. The dashboard gives us clear visibility."
+                    </p>
+                    <div class="testimonial-author">
+                        <div class="avatar">PS</div>
+                        <div>
+                            <div class="testimonial-name">Priya Sharma</div>
+                            <div class="testimonial-role">Municipal Officer</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="testimonial-card card card-glass">
+                    <div class="testimonial-rating">
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-star"></i>
+                    </div>
+                    <p class="testimonial-text">
+                        "The transparency is amazing. I can see what issues my neighbors are 
+                        reporting and upvote them. Real community collaboration!"
+                    </p>
+                    <div class="testimonial-author">
+                        <div class="avatar">RJ</div>
+                        <div>
+                            <div class="testimonial-name">Rahul Joshi</div>
+                            <div class="testimonial-role">Community Leader</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== CTA SECTION ===== -->
+    <section class="cta-section" aria-labelledby="ctaTitle">
+        <div class="container">
+            <div class="cta-content card card-glass text-center">
+                <h2 id="ctaTitle" class="cta-title">
+                    Ready to Make Your <span class="gradient-primary">City Better</span>?
+                </h2>
+                <p class="cta-description">
+                    Join CivicConnect today and be part of the change. Report issues, 
+                    track progress, and help build smarter cities.
+                </p>
+                <div class="cta-actions">
+                    <a href="pages/auth/register.html" id="ctaGetStartedBtn" class="btn btn-primary btn-lg">
+                        <i class="fas fa-rocket" aria-hidden="true"></i>
+                        Get Started Free
+                    </a>
+                    <a href="pages/auth/login.html" id="ctaLoginBtn" class="btn btn-secondary btn-lg">
+                        <i class="fas fa-sign-in-alt" aria-hidden="true"></i>
+                        Sign In
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== FOOTER ===== -->
+    <footer id="mainFooter" class="main-footer" role="contentinfo">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <div class="footer-brand-logo">
+                        <span class="brand-icon" aria-hidden="true">
+                            <i class="fas fa-city"></i>
+                        </span>
+                        <span>CivicConnect</span>
+                    </div>
+                    <p class="footer-description">
+                        Empowering citizens to build smarter, cleaner, and safer cities 
+                        through technology and collaboration.
+                    </p>
+                    <div class="footer-social">
+                        <a href="#" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+                        <a href="#" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="#" aria-label="YouTube"><i class="fab fa-youtube"></i></a>
+                    </div>
+                </div>
+                
+                <div class="footer-links">
+                    <h4 class="footer-heading">Platform</h4>
+                    <ul>
+                        <li><a href="#features">Features</a></li>
+                        <li><a href="#how-it-works">How It Works</a></li>
+                        <li><a href="#">Pricing</a></li>
+                        <li><a href="#">FAQ</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-links">
+                    <h4 class="footer-heading">Support</h4>
+                    <ul>
+                        <li><a href="#">Help Center</a></li>
+                        <li><a href="#">Contact Us</a></li>
+                        <li><a href="#">Privacy Policy</a></li>
+                        <li><a href="#">Terms of Service</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-links">
+                    <h4 class="footer-heading">Company</h4>
+                    <ul>
+                        <li><a href="#">About Us</a></li>
+                        <li><a href="#">Careers</a></li>
+                        <li><a href="#">Blog</a></li>
+                        <li><a href="#">Press Kit</a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; 2026 CivicConnect. All rights reserved. Built with ❤️ for smarter cities.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ============================================
+    SCRIPTS
+    ============================================ -->
+    
+    <script>
+    // ============================================
+    // DROPDOWN TOGGLE FUNCTIONS
+    // ============================================
+    
+    // Toggle Get Started Dropdown
+    function toggleGetStartedDropdown(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const dropdown = document.getElementById('getStartedDropdown');
+        const btn = document.getElementById('getStartedDropdownBtn');
+        
+        // Toggle the dropdown
+        dropdown.classList.toggle('show');
+        
+        // Update ARIA attributes
+        const isExpanded = dropdown.classList.contains('show');
+        btn.setAttribute('aria-expanded', isExpanded);
+        
+        // Rotate the chevron icon
+        const chevron = btn.querySelector('.fa-chevron-down');
+        if (chevron) {
+            if (isExpanded) {
+                chevron.style.transform = 'rotate(180deg)';
+                chevron.style.transition = 'transform 0.3s ease';
+            } else {
+                chevron.style.transform = 'rotate(0deg)';
+                chevron.style.transition = 'transform 0.3s ease';
+            }
+        }
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+        const dropdownContainer = document.getElementById('getStartedDropdownContainer');
+        const dropdown = document.getElementById('getStartedDropdown');
+        const btn = document.getElementById('getStartedDropdownBtn');
+        
+        if (dropdownContainer && !dropdownContainer.contains(event.target)) {
+            dropdown.classList.remove('show');
+            btn.setAttribute('aria-expanded', 'false');
+            
+            // Reset chevron rotation
+            const chevron = btn.querySelector('.fa-chevron-down');
+            if (chevron) {
+                chevron.style.transform = 'rotate(0deg)';
+            }
+        }
+    });
+
+    // Close dropdown on Escape key
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            const dropdown = document.getElementById('getStartedDropdown');
+            const btn = document.getElementById('getStartedDropdownBtn');
+            
+            if (dropdown && dropdown.classList.contains('show')) {
+                dropdown.classList.remove('show');
+                btn.setAttribute('aria-expanded', 'false');
+                
+                // Reset chevron rotation
+                const chevron = btn.querySelector('.fa-chevron-down');
+                if (chevron) {
+                    chevron.style.transform = 'rotate(0deg)';
+                }
+            }
+        }
+    });
+
+    // Close dropdown on scroll
+    window.addEventListener('scroll', function() {
+        const dropdown = document.getElementById('getStartedDropdown');
+        const btn = document.getElementById('getStartedDropdownBtn');
+        
+        if (dropdown && dropdown.classList.contains('show')) {
+            dropdown.classList.remove('show');
+            btn.setAttribute('aria-expanded', 'false');
+            
+            // Reset chevron rotation
+            const chevron = btn.querySelector('.fa-chevron-down');
+            if (chevron) {
+                chevron.style.transform = 'rotate(0deg)';
+            }
+        }
+    });
+
+    // ============================================
+    // ACTIVE NAV LINK (Optional)
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function() {
+        const navLinks = document.querySelectorAll('.nav-menu .nav-link');
+        
+        navLinks.forEach(function(link) {
+            link.addEventListener('click', function(e) {
+                // Remove active class from all links
+                navLinks.forEach(function(l) {
+                    l.classList.remove('active');
+                });
+                
+                // Add active class to clicked link
+                this.classList.add('active');
+            });
+        });
+    });
+
+    // ============================================
+    // THEME TOGGLE
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function() {
+        const themeToggle = document.getElementById('themeToggleBtn');
+        const themeIcon = document.getElementById('themeIcon');
+        const html = document.documentElement;
+        
+        // Check saved theme
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            html.setAttribute('data-theme', savedTheme);
+            updateThemeIcon(savedTheme);
+        }
+        
+        // Toggle theme
+        themeToggle.addEventListener('click', function() {
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+        
+        function updateThemeIcon(theme) {
+            if (theme === 'dark') {
+                themeIcon.className = 'fas fa-sun';
+            } else {
+                themeIcon.className = 'fas fa-moon';
+            }
+        }
+    });
+</script>
+</body>
+</html>
