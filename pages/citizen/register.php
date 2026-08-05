@@ -1,6 +1,11 @@
 <?php // Backend for Registration
+<<<<<<< HEAD:pages/citizen/register.php
   require_once __DIR__ . '/../functions/database/database.php';
   require_once __DIR__ . '/../functions/validations/validations.php';
+=======
+  require_once __DIR__ . '\..\..\functions\database\database.php';
+  require_once __DIR__ . '\..\..\functions\validations\validations.php';
+>>>>>>> abc6026 (..):register/index.php
 
   $db = connectDatabase();
 
@@ -42,6 +47,9 @@
 
     if ($isRegistrationFormValidated) {
       // Main Registration Logic goes here ...
+      // Redirect to login page after successful registration
+      header("Location: login.php");
+      exit();
     }
   }
 ?>
@@ -67,7 +75,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Main Styles -->
-  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../assets/css/style.css">
 </head>
 
 <body>
@@ -98,7 +106,7 @@
           <i class="fas fa-moon" id="themeIcon"></i>
         </button>
 
-        <a href="login.html" id="loginNavBtn" class="btn btn-secondary">
+        <a href="login.php" id="loginNavBtn" class="btn btn-secondary">
           <i class="fas fa-sign-in-alt" aria-hidden="true"></i>
           Sign In
         </a>
@@ -121,7 +129,7 @@
           </div>
 
           <!-- Registration Form -->
-          <form id="registerForm" class="auth-form" novalidate>
+          <form id="registerForm" class="auth-form" method="POST" action="./index.php" novalidate>
             <!-- Full Name -->
             <div class="form-group">
               <label for="registerFullName" class="form-label">
@@ -286,6 +294,7 @@
             <button
               id="registerSubmitBtn"
               type="submit"
+              name="registerSubmit"
               class="btn btn-primary btn-lg w-full auth-submit-btn">
               <i class="fas fa-user-plus" aria-hidden="true"></i>
               Create Account
@@ -308,7 +317,7 @@
             <div class="auth-footer text-center">
               <p class="auth-footer-text">
                 Already have an account?
-                <a href="login.html" id="signInLink" class="auth-link">
+                <a href="login.php" id="signInLink" class="auth-link">
                   Sign in here
                   <i class="fas fa-arrow-right" aria-hidden="true"></i>
                 </a>
@@ -425,67 +434,18 @@
 
       if (form) {
         form.addEventListener('submit', function(e) {
-          e.preventDefault();
-
-          const fullName = document.getElementById('registerFullName').value;
-          const email = document.getElementById('registerEmail').value;
-          const phone = document.getElementById('registerPhone').value;
-          const password = document.getElementById('registerPassword').value;
-          const confirmPassword = document.getElementById('registerConfirmPassword').value;
-          const role = document.getElementById('userRole').value;
-          const termsAccepted = document.getElementById('termsCheckbox').checked;
-
-          // Basic validation
-          if (!fullName || !email || !phone || !password || !confirmPassword || !role) {
-            alert('Please fill in all required fields.');
-            return;
-          }
-
-          if (password !== confirmPassword) {
-            alert('Passwords do not match!');
-            return;
-          }
-
-          if (password.length < 8) {
-            alert('Password must be at least 8 characters long.');
-            return;
-          }
-
-          if (!termsAccepted) {
-            alert('Please accept the Terms of Service and Privacy Policy.');
-            return;
-          }
-
-          // API-ready data structure
-          const registrationData = {
-            fullName: fullName,
-            email: email,
-            phone: phone,
-            password: password,
-            role: role,
-            termsAccepted: termsAccepted,
-            createdAt: new Date().toISOString()
-          };
-
-          console.log('Registration Data:', registrationData);
-
-          // Show loading state
+          // Let PHP handle the submission
+          // No need to prevent default for PHP form submission
+          // Just show loading state
+          
           const submitBtn = document.getElementById('registerSubmitBtn');
           const originalText = submitBtn.innerHTML;
           submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Creating account...';
           submitBtn.disabled = true;
           submitBtn.classList.add('loading');
-
-          // Simulate API call
-          setTimeout(function() {
-            submitBtn.innerHTML = originalText;
-            submitBtn.disabled = false;
-            submitBtn.classList.remove('loading');
-            alert('Account created successfully! (Demo)');
-
-            // In production, redirect to login
-            // window.location.href = 'login.html';
-          }, 1500);
+          
+          // Form will submit to PHP normally
+          // The loading state will be shown until page reloads
         });
       }
     });

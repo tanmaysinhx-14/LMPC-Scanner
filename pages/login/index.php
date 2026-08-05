@@ -75,7 +75,7 @@
     <div class="container-fluid d-flex align-center justify-between">
       <!-- Brand -->
       <a
-        href="../../index.html"
+        href="../../index.php"
         id="brandLink"
         class="navbar-brand"
         aria-label="CivicConnect Home">
@@ -96,7 +96,11 @@
           <i class="fas fa-moon" id="themeIcon"></i>
         </button>
 
+<<<<<<< HEAD:pages/login/index.php
         <a href="../register/" id="registerNavBtn" class="btn btn-primary">
+=======
+        <a href="register.php" id="registerNavBtn" class="btn btn-primary">
+>>>>>>> abc6026 (..):login/index.php
           <i class="fas fa-user-plus" aria-hidden="true"></i>
           Create Account
         </a>
@@ -192,7 +196,11 @@
                 <label for="rememberMe" class="form-check-label">Remember me</label>
               </div>
               <a
+<<<<<<< HEAD:pages/login/index.php
                 href="../changePassword/"
+=======
+                href="forgot-password.php"
+>>>>>>> abc6026 (..):login/index.php
                 id="forgotPasswordLink"
                 class="forgot-password">
                 Forgot password?
@@ -230,7 +238,11 @@
             <div class="auth-footer text-center">
               <p class="auth-footer-text">
                 Don't have an account?
+<<<<<<< HEAD:pages/login/index.php
                 <a href="../register/" id="signUpLink" class="auth-link">
+=======
+                <a href="register.php" id="signUpLink" class="auth-link">
+>>>>>>> abc6026 (..):login/index.php
                   Create one now
                   <i class="fas fa-arrow-right" aria-hidden="true"></i>
                 </a>

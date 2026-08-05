@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en" data-theme="light">
+<<<<<<< HEAD
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,6 +9,28 @@
       content="CivicConnect - Crowdsourced Civic Issue Reporting & Resolution Platform"
     />
     <meta name="theme-color" content="#4F46E5" />
+=======
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CivicConnect - Crowdsourced Civic Issue Reporting & Resolution Platform">
+    <meta name="theme-color" content="#4F46E5">
+    
+    <title>CivicConnect - Report & Track Civic Issues</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Main Styles -->
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+>>>>>>> abc6026 (..)
 
     <title>CivicConnect - Report & Track Civic Issues</title>
 
@@ -34,6 +57,7 @@
     ============================================ -->
 
     <!-- ===== NAVBAR ===== -->
+<<<<<<< HEAD
     <nav
       id="landingNavbar"
       class="navbar"
@@ -103,6 +127,59 @@
                 <i class="fas fa-sign-in-alt" aria-hidden="true"></i>
                 Log In
               </a>
+=======
+    <nav id="landingNavbar" class="navbar" role="navigation" aria-label="Main navigation">
+        <div class="container-fluid d-flex align-center justify-between">
+            <!-- Brand -->
+            <a href="index.html" id="brandLink" class="navbar-brand" aria-label="CivicConnect Home">
+                <span class="brand-icon" aria-hidden="true">
+                    <i class="fas fa-city"></i>
+                </span>
+                <span class="brand-text">CivicConnect</span>
+            </a>
+            
+            <!-- Nav Links with Animated Underline -->
+            <ul class="nav-menu" id="navLinks">
+                <li><a href="#features" class="nav-link active">Features</a></li>
+                <li><a href="#how-it-works" class="nav-link">How It Works</a></li>
+                <li><a href="#testimonials" class="nav-link">Testimonials</a></li>
+            </ul>
+            
+            <!-- Actions -->
+            <div class="navbar-actions">
+                <button 
+                    id="themeToggleBtn" 
+                    class="theme-toggle" 
+                    aria-label="Toggle theme"
+                    title="Toggle dark/light mode"
+                    data-theme-toggle>
+                    <i class="fas fa-moon" id="themeIcon"></i>
+                </button>
+                
+                <!-- Get Started Dropdown -->
+                <div class="dropdown" id="getStartedDropdownContainer">
+                    <button 
+                        id="getStartedDropdownBtn" 
+                        class="btn btn-primary" 
+                        onclick="toggleGetStartedDropdown(event)"
+                        aria-expanded="false"
+                        aria-haspopup="true">
+                        Get Started
+                        <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                    </button>
+                    <div id="getStartedDropdown" class="dropdown-menu" role="menu">
+                        <a href="login/index.php" class="dropdown-item" role="menuitem">
+                            <i class="fas fa-user-plus" aria-hidden="true"></i>
+                            Sign Up
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a href="register/index.php" class="dropdown-item" role="menuitem">
+                            <i class="fas fa-sign-in-alt" aria-hidden="true"></i>
+                            Log In
+                        </a>
+                    </div>
+                </div>
+>>>>>>> abc6026 (..)
             </div>
           </div>
         </div>
