@@ -1,0 +1,18 @@
+Required API endpoints:
+
+POST   /api/issues/submit          → multipart: image + JSON body → runs AI, stores issue
+POST   /api/issues/analyze-preview → multipart: image → returns AI result only (no DB write)
+GET    /api/issues/list?ward=&cat=&status=&page=  → paginated issues
+GET    /api/issues/detail?id=      → single issue with images + status history
+POST   /api/issues/upvote          → {issue_id} → toggle upvote, return new count
+POST   /api/issues/flag-fake       → {issue_id, reason} → add fake flag
+GET    /api/issues/nearby?lat=&lng=&radius=50&cat= → for client-side duplicate detection
+PUT    /api/issues/status          → {issue_id, status, note} → admin/worker only
+POST   /api/issues/assign          → {issue_id, worker_id} → admin only
+GET    /api/stats/heatmap?ward=    → [{lat, lng, severity, count}] for Leaflet heatmap
+GET    /api/stats/city             → KPIs: open, resolved_today, avg_resolution_hours, etc.
+GET    /api/stats/trends?days=30   → time-series by category for Chart.js
+POST   /api/auth/login             → {email, password} → sets session, returns role
+POST   /api/auth/register          → {name, email, password, phone, city}
+POST   /api/auth/logout            → clears session
+GET    /api/auth/me                → current session user data

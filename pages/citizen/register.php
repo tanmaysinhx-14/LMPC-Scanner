@@ -1,6 +1,6 @@
 <?php // Backend for Registration
-  require_once __DIR__ . '\..\functions\database\database.php';
-  require_once __DIR__ . '\..\functions\validations\validations.php';
+  require_once __DIR__ . '/../functions/database/database.php';
+  require_once __DIR__ . '/../functions/validations/validations.php';
 
   $db = connectDatabase();
 

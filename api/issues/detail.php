@@ -1,0 +1,1 @@
+// Retrieve data of a single issue

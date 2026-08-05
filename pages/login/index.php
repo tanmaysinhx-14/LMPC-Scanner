@@ -1,6 +1,7 @@
 <?php // Backend for Login
-  require_once __DIR__ . '\..\functions\database\database.php';
-  require_once __DIR__ . '\..\functions\validations\validations.php';
+  require_once __DIR__ . '/../../functions/database/database.php';
+  require_once __DIR__ . '/../../functions/validations/validations.php';
+  require_once __DIR__ . '/../../functions/utility/utility.php';
 
   $db = connectDatabase();
 
@@ -26,7 +27,7 @@
     }
 
     if ($isLoginPageValidated) {
-      // Main Login Logic goes here... 
+      redirect('../dashboard?type=citizen', 0);
     }
   }
 ?>
@@ -57,7 +58,7 @@
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
   <!-- Main Styles -->
-  <link rel="stylesheet" href="../assets/css/style.css" />
+  <link rel="stylesheet" href="../../assets/css/style.css" />
 </head>
 
 <body>
@@ -95,7 +96,7 @@
           <i class="fas fa-moon" id="themeIcon"></i>
         </button>
 
-        <a href="register.html" id="registerNavBtn" class="btn btn-primary">
+        <a href="../register/" id="registerNavBtn" class="btn btn-primary">
           <i class="fas fa-user-plus" aria-hidden="true"></i>
           Create Account
         </a>
@@ -136,6 +137,7 @@
                   type="email"
                   name="email"
                   placeholder="Enter your email address"
+                  value="sample.citizen@gmail.com"
                   required
                   autocomplete="email"
                   aria-describedby="emailHelp" />
@@ -160,6 +162,7 @@
                   type="password"
                   name="password"
                   placeholder="Enter your password"
+                  value="Citizen@123"
                   required
                   minlength="8"
                   autocomplete="current-password"
@@ -189,7 +192,7 @@
                 <label for="rememberMe" class="form-check-label">Remember me</label>
               </div>
               <a
-                href="forgot-password.html"
+                href="../changePassword/"
                 id="forgotPasswordLink"
                 class="forgot-password">
                 Forgot password?
@@ -227,7 +230,7 @@
             <div class="auth-footer text-center">
               <p class="auth-footer-text">
                 Don't have an account?
-                <a href="register.html" id="signUpLink" class="auth-link">
+                <a href="../register/" id="signUpLink" class="auth-link">
                   Create one now
                   <i class="fas fa-arrow-right" aria-hidden="true"></i>
                 </a>
