@@ -3,7 +3,7 @@
   require_once __DIR__ . '/../../functions/validations/validations.php';
   require_once __DIR__ . '/../../functions/utility/response.php';
 
-  $db = connectDatabase();
+  $pdo = connectDatabase();
 
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fullName = sanitizeInput($_POST['fullName'] ?? '');
@@ -31,15 +31,37 @@
     } elseif (!$termsAccepted) {
       $isRegistrationFormValidated = false;
       $error = "Please accept the Terms of Service and Privacy Policy.";
+    } else {
+      // Check if email already exists
+      $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+      $stmt->execute([$email]);
+      if ($stmt->fetch()) {
+        $isRegistrationFormValidated = false;
+        $error = "This email is already registered. Please use a different email or login.";
+      }
     }
 
     if ($isRegistrationFormValidated) {
-      // Main Registration Logic goes here ...
-      header("Location: ../login/index.php?success=Account created successfully! Please login.");
-      exit();
+      // Hash the password
+      $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+      
+      // Insert user into database
+      $stmt = $pdo->prepare("
+        INSERT INTO users (full_name, email, phone, password_hash, role, created_at) 
+        VALUES (?, ?, ?, ?, ?, NOW())
+      ");
+      
+      try {
+        $stmt->execute([$fullName, $email, $phone, $hashedPassword, $role]);
+        header("Location: ../login/index.php?success=Account created successfully! Please login with your credentials.");
+        exit();
+      } catch (PDOException $e) {
+        $error = "Registration failed. Please try again.";
+      }
     }
   }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
@@ -220,17 +242,20 @@
               <div id="confirmHelp" class="form-text text-muted">Passwords must match</div>
             </div>
 
-            <!-- Role -->
+            <!-- Role Selection -->
             <div class="mb-3">
               <label for="userRole" class="form-label fw-medium">
                 I am a <span class="text-danger">*</span>
               </label>
-              <select id="userRole" name="userRole" class="form-select" required>
-                <option value="">Select your role...</option>
-                <option value="citizen" <?php echo (isset($_POST['userRole']) && $_POST['userRole'] === 'citizen') ? 'selected' : ''; ?>>Citizen</option>
-                <option value="authority" <?php echo (isset($_POST['userRole']) && $_POST['userRole'] === 'authority') ? 'selected' : ''; ?>>Municipal Authority</option>
-                <option value="admin" <?php echo (isset($_POST['userRole']) && $_POST['userRole'] === 'admin') ? 'selected' : ''; ?>>Administrator</option>
-              </select>
+              <div class="form-input-wrapper">
+                <span class="input-icon"><i class="fas fa-user-tag"></i></span>
+                <select id="userRole" name="userRole" class="form-select" required style="padding-left: 44px; height: 48px;">
+                  <option value="">Select your role...</option>
+                  <option value="citizen" <?php echo (isset($_POST['userRole']) && $_POST['userRole'] === 'citizen') ? 'selected' : ''; ?>>Citizen</option>
+                  <option value="authority" <?php echo (isset($_POST['userRole']) && $_POST['userRole'] === 'authority') ? 'selected' : ''; ?>>Municipal Authority</option>
+                  <option value="admin" <?php echo (isset($_POST['userRole']) && $_POST['userRole'] === 'admin') ? 'selected' : ''; ?>>Administrator</option>
+                </select>
+              </div>
               <div class="form-text text-muted">Select the role that best describes you</div>
             </div>
 
