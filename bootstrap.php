@@ -15,9 +15,24 @@
 ?>
 
 <?php 
-  $db = connectDatabase();
+  function bootstrapAccounts(array $options = []): array {
+    $db = connectDatabase();
 
-  if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+      session_start();
+    }
+
+    $requiredRoles = $options['required_roles'] ?? [];
+
+    $requiresLogin = ($options['require_login'] ?? false) || $requiredRoles !== [];
+
+    if ($requiresLogin && (($_SESSION['logged_in'] ?? false) !== true)) {
+      setToast(message: 'You are not logged in. Please log in to access this page.', type: 'danger');
+      redirect('../login/', 0);
+    }
+
+    return [
+      'db' => $db
+    ];
   }
 ?>

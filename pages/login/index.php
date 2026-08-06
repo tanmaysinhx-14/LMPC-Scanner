@@ -1,7 +1,77 @@
-<?php // Bootstrapper + Backend Configuration
+<?php // Bootstrapper
   require __DIR__ . '/../../bootstrap.php';
 
-  require __DIR__ . '/../../functions/worker/login.php';
+  $bootstrapData = bootstrapAccounts();
+
+  extract($bootstrapData);
+?>
+
+<?php // Backend for Login
+  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email = sanitizeInput($_POST['email'] ?? '');
+    $password = sanitizeInput($_POST['password'] ?? '');
+    $selectedRole = sanitizeInput($_POST['role'] ?? '');
+    $rememberMe = isset($_POST['rememberMe']);
+
+    if (empty($email) || empty($password) || empty($selectedRole)) {
+      setToast('Please fill in all required fields.', type: 'danger');
+    } 
+    elseif (!validateEmail($email)) {
+      setToast('Please enter a valid email address.', type: 'danger');
+    } 
+    elseif (!validatePassword($password)) {
+      setToast('Password must be at least 8 characters long, contain at least one number, and one symbol.', type: 'danger');
+    } 
+    else {
+      $stmt = $db->prepare("SELECT * FROM users WHERE email = ?");
+      $stmt->execute([$email]);
+      $user = $stmt->fetch();
+
+      if (!$user) {
+        setToast('No account found with this email address.', type: 'danger');
+      } 
+      else {
+        if ($password !== $user['password_hash'] && !password_verify($password, $user['password_hash'])) {
+          setToast('Invalid password. Please try again.', type: 'danger');
+        } 
+        elseif ($user['role'] !== $selectedRole) {
+          setToast("You are registered as a " . ucfirst($user['role']) . ". Please select the correct role.", type: 'danger');
+        } 
+        else {
+          $_SESSION['user_id'] = $user['id'];
+          $_SESSION['user_name'] = $user['full_name'];
+          $_SESSION['user_email'] = $user['email'];
+          $_SESSION['user_role'] = $user['role'];
+          $_SESSION['logged_in'] = true;
+
+          if ($rememberMe) {
+            setcookie('user_email', $email, time() + (86400 * 30), "/");
+            setcookie('user_role', $user['role'], time() + (86400 * 30), "/");
+          }
+
+          switch ($user['role']) {
+            case 'citizen':
+              header("Location: ../citizen/citizen-dashboard.php");
+              break;
+            case 'authority':
+              header("Location: ../authority/citizen-dashboard.php");
+              break;
+            case 'admin':
+              header("Location: ../admin/citizen-dashboard.php");
+              break;
+            default:
+              header("Location: ../citizen/citizen-dashboard.php");
+          }
+          exit();
+        }
+      }
+    }
+  }
+
+  if (isset($_COOKIE['user_email']) && isset($_COOKIE['user_role'])) {
+    $email = $_COOKIE['user_email'];
+    $role = $_COOKIE['user_role'];
+  }
 ?>
 
 <?php // Header (contains Unified Page Meta-Data and CSS imports)
@@ -65,9 +135,9 @@
                     <span class="input-group-text bg-body border-end-0 text-muted"><i class="fas fa-user-tag"></i></span>
                     <select id="loginRole" name="role" class="form-select border-start-0 ps-0" required>
                       <option value="">Select your role...</option>
-                      <option value="citizen" <?php echo ($role === 'citizen' || (isset($_POST['role']) && $_POST['role'] === 'citizen')) ? 'selected' : ''; ?>>Citizen</option>
-                      <option value="authority" <?php echo ($role === 'authority' || (isset($_POST['role']) && $_POST['role'] === 'authority')) ? 'selected' : ''; ?>>Municipal Authority</option>
-                      <option value="admin" <?php echo ($role === 'admin' || (isset($_POST['role']) && $_POST['role'] === 'admin')) ? 'selected' : ''; ?>>Administrator</option>
+                      <option value="citizen" selected>Citizen</option>
+                      <option value="authority">Municipal Authority</option>
+                      <option value="admin">Administrator</option>
                     </select>
                   </div>
                 </div>
@@ -76,7 +146,7 @@
                   <label for="loginEmail" class="form-label fw-medium">Email Address <span class="text-danger">*</span></label>
                   <div class="input-group">
                     <span class="input-group-text bg-body border-end-0 text-muted"><i class="fas fa-envelope"></i></span>
-                    <input id="loginEmail" name="email" type="email" class="form-control border-start-0 ps-0" placeholder="Enter your email address" required autocomplete="email" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : htmlspecialchars($email ?? ''); ?>">
+                    <input id="loginEmail" name="email" type="email" class="form-control border-start-0 ps-0" placeholder="Enter your email address" required autocomplete="email" value="mail.citizen@gmail.com">
                   </div>
                 </div>
 
@@ -84,7 +154,7 @@
                   <label for="loginPassword" class="form-label fw-medium">Password <span class="text-danger">*</span></label>
                   <div class="input-group">
                     <span class="input-group-text bg-body border-end-0 text-muted"><i class="fas fa-lock"></i></span>
-                    <input id="loginPassword" name="password" type="password" class="form-control border-start-0 border-end-0 ps-0" placeholder="Enter your password" required minlength="8" autocomplete="current-password">
+                    <input id="loginPassword" name="password" type="password" class="form-control border-start-0 border-end-0 ps-0" placeholder="Enter your password" required minlength="8" autocomplete="current-password" value="Citizen@123">
                     <button type="button" class="btn btn-outline-secondary border-start-0 text-muted" onclick="togglePassword()">
                       <i class="fas fa-eye" id="passwordIcon"></i>
                     </button>
@@ -103,17 +173,7 @@
                   <i class="fas fa-sign-in-alt me-2"></i>Sign In
                 </button>
 
-                <div class="d-flex align-items-center mb-3">
-                  <hr class="flex-grow-1">
-                  <span class="px-3 text-muted text-uppercase small fw-medium">or continue with</span>
-                  <hr class="flex-grow-1">
-                </div>
-
-                <button type="button" class="btn btn-outline-secondary w-100 py-2 mb-4 fw-medium">
-                  <i class="fab fa-google me-2 text-danger"></i>Sign in with Google
-                </button>
-
-                <div class="text-center pt-3 border-top">
+                <div class="text-center pt-4">
                   <p class="text-secondary mb-0">
                     Don't have an account?
                     <a href="../register/index.php" class="text-primary fw-semibold text-decoration-none">
@@ -136,7 +196,7 @@
   ?>
 
   <script src="../../assets/js/index.js" type="text/javascript"></script>
-  <script type="text/javascript"> // Login Exclusive JS
+  <script type="text/javascript">
     function togglePassword() {
       const passwordInput = document.getElementById('loginPassword');
       const passwordIcon = document.getElementById('passwordIcon');

@@ -1,5 +1,13 @@
 <?php // Bootstrapper + Backend Integration
   require __DIR__ . '/../../bootstrap.php';
+
+  $bootstrapData = bootstrapAccounts(
+    options: [
+      'require_login' => true // Page accessible to logged out users only
+    ]
+  );
+  
+  extract($bootstrapData);
 ?>
 
 <?php // Mock Data for Citizen Dashboard
@@ -132,7 +140,7 @@ $communityIssues = [
         </a>
       </li>
       <li class="nav-item">
-        <a href="../login/index.php?logout=true" class="nav-link text-danger d-flex align-items-center gap-3">
+        <a href="../logout/" class="nav-link text-danger d-flex align-items-center gap-3">
           <i class="fas fa-sign-out-alt fa-fw"></i> Logout
         </a>
       </li>
@@ -164,7 +172,7 @@ $communityIssues = [
             <li>
               <hr class="dropdown-divider">
             </li>
-            <li><a class="dropdown-item text-danger" href="../login/index.php?logout=true"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+            <li><a class="dropdown-item text-danger" href="../logout/"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
           </ul>
         </div>
       </div>

@@ -1,5 +1,13 @@
 <?php // Bootstrapper + Backend Configuration
   require __DIR__ . '/../../bootstrap.php';
+
+  $bootstrapData = bootstrapAccounts(
+    options: [
+      'require_login' => true // Page accessible to logged out users only
+    ]
+  );
+  
+  extract($bootstrapData);
 ?>
 
 <?php // Mock Data for Admin Dashboard
@@ -90,7 +98,7 @@
     <hr>
     <ul class="nav nav-pills flex-column">
       <li class="nav-item">
-        <a href="../login/index.php?logout=true" class="nav-link text-danger d-flex align-items-center gap-3">
+        <a href="../logout/" class="nav-link text-danger d-flex align-items-center gap-3">
           <i class="fas fa-sign-out-alt fa-fw"></i> Logout
         </a>
       </li>
@@ -118,7 +126,7 @@
           <ul class="dropdown-menu dropdown-menu-end shadow">
             <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item text-danger" href="../login/index.php?logout=true"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+            <li><a class="dropdown-item text-danger" href="../logout/"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
           </ul>
         </div>
       </div>
