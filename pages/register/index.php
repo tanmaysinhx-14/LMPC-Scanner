@@ -59,6 +59,7 @@
 <?php // Header (contains Unified Page Meta-Data and CSS imports)
   require_once '../../components/header.php';
 ?>
+
 <body class="d-flex flex-column min-vh-100">
   <nav class="navbar navbar-expand-lg sticky-top bg-body border-bottom shadow-sm">
     <div class="container">
