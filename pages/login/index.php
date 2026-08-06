@@ -4,20 +4,11 @@
   require __DIR__ . '/../../functions/worker/login.php';
 ?>
 
-<!doctype html>
-<html lang="en" data-bs-theme="light">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Sign in to CivicConnect - Report & Track Civic Issues" />
-  <meta name="theme-color" content="#4F46E5" />
-  <title>CivicConnect - Sign In</title>
+<?php // Header (contains Unified Page Meta-Data and CSS imports)
+  require_once '../../components/header.php';
+?>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
-  <script src="https://kit.fontawesome.com/dba62debdb.js" crossorigin="anonymous"></script>
-</head>
-<body class="bg-body-tertiary">
-
+<body class="d-flex flex-column min-vh-100">
   <nav class="navbar navbar-expand-lg sticky-top bg-body border-bottom shadow-sm">
     <div class="container-fluid px-4">
       <a href="../../index.html" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary">
@@ -139,16 +130,13 @@
     </div>
   </section>
 
-  <footer class="py-4 border-top bg-body">
-    <div class="container text-center">
-      <p class="text-muted mb-0 small">&copy; 2026 CivicConnect. All rights reserved.</p>
-    </div>
-  </footer>
+  <?php // Contains Bottom-Credits and JS imports
+    require_once '../../components/bottom-credits.php';
+    require_once '../../components/footer.php';
+  ?>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
   <script src="../../assets/js/index.js" type="text/javascript"></script>
-
-  <script>
+  <script type="text/javascript"> // Login Exclusive JS
     function togglePassword() {
       const passwordInput = document.getElementById('loginPassword');
       const passwordIcon = document.getElementById('passwordIcon');

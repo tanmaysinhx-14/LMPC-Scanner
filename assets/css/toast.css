@@ -1,0 +1,76 @@
+/* Update the existing .toast rule to include transition and animation */
+.toast-float .toast {
+  display: block;
+  min-width: 320px;
+  max-width: 420px;
+  border-radius: 0.75rem;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  opacity: 1;
+  z-index: 9999;
+  position: absolute;
+  top: 100px;
+  right: 20px; 
+  color: #ffffff;
+  
+  /* Enables smooth exit when .toast-hide is applied */
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  
+  /* Entrance animation */
+  animation: slideInRight 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* State when JavaScript adds the 'toast-hide' class */
+.toast-float .toast.toast-hide {
+  opacity: 0;
+  transform: translateX(120%);
+}
+
+/* Keyframes for the entrance animation */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+} 
+
+.toast-float .toast-body {
+  padding: 0.9rem 1.1rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.toast-float .btn-close {
+  filter: invert(1);
+  opacity: 0.65;
+}
+
+.toast-float .btn-close:hover {
+  opacity: 1;
+}
+
+.toast-success {
+  background-color: #198754;
+}
+
+.toast-danger {
+  background-color: #dc3545;
+}
+
+.toast-warning {
+  background-color: #ffc107;
+  color: #212529;
+}
+
+.toast-info {
+  background-color: #0dcaf0;
+  color: #212529;
+}
+
+.toast-primary {
+  background-color: #0d6efd;
+}
