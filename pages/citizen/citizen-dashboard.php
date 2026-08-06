@@ -1,8 +1,16 @@
-<?php
+<?php // Bootstrapper + Backend Integration
   require __DIR__ . '/../../bootstrap.php';
+
+  $bootstrapData = bootstrapAccounts(
+    options: [
+      'require_login' => true // Page accessible to logged out users only
+    ]
+  );
+  
+  extract($bootstrapData);
 ?>
 
-<?php // Mock Data
+<?php // Mock Data for Citizen Dashboard
 $userStats = [
   'total' => 24,
   'resolved' => 18,
@@ -70,15 +78,12 @@ $communityIssues = [
   ]
 ];
 ?>
-<!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CivicConnect - Citizen Dashboard</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<?php // Header (contains Unified Page Meta-Data and CSS imports)
+  require_once '../../components/header.php';
+?>
+
+<body class="d-flex vh-100 overflow-hidden bg-light">
   <style>
     #sidebar {
       transition: margin 0.3s ease-in-out;
@@ -88,10 +93,6 @@ $communityIssues = [
       margin-left: -280px;
     }
   </style>
-</head>
-
-<body class="d-flex vh-100 overflow-hidden bg-light">
-
   <div id="sidebar" class="d-flex flex-column flex-shrink-0 p-3 bg-white border-end shadow-sm z-3" style="width: 280px;">
     <a href="dashboard.php" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-dark text-decoration-none gap-2">
       <i class="fas fa-city fs-4 text-primary"></i>
@@ -139,7 +140,7 @@ $communityIssues = [
         </a>
       </li>
       <li class="nav-item">
-        <a href="../login/index.php?logout=true" class="nav-link text-danger d-flex align-items-center gap-3">
+        <a href="../logout/" class="nav-link text-danger d-flex align-items-center gap-3">
           <i class="fas fa-sign-out-alt fa-fw"></i> Logout
         </a>
       </li>
@@ -171,7 +172,7 @@ $communityIssues = [
             <li>
               <hr class="dropdown-divider">
             </li>
-            <li><a class="dropdown-item text-danger" href="../login/index.php?logout=true"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+            <li><a class="dropdown-item text-danger" href="../logout/"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
           </ul>
         </div>
       </div>
@@ -341,7 +342,8 @@ $communityIssues = [
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <?php // Contains JS imports
+    require_once '../../components/footer.php';
+  ?>
 </body>
-
 </html>

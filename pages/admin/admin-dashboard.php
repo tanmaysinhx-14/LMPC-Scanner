@@ -1,8 +1,16 @@
-<?php
+<?php // Bootstrapper + Backend Configuration
   require __DIR__ . '/../../bootstrap.php';
+
+  $bootstrapData = bootstrapAccounts(
+    options: [
+      'require_login' => true // Page accessible to logged out users only
+    ]
+  );
+  
+  extract($bootstrapData);
 ?>
 
-<?php // Mock Data
+<?php // Mock Data for Admin Dashboard
   $totalUsers = 15420;
   $newUsers = 342;
   
@@ -39,21 +47,15 @@
   ];
 ?>
 
-<!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CivicConnect - Admin Dashboard</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://kit.fontawesome.com/dba62debdb.js" crossorigin="anonymous"></script>
+<?php // Header (contains Unified Page Meta-Data and CSS imports)
+  require_once '../../components/header.php';
+?>
+
+<body class="d-flex vh-100 overflow-hidden bg-light">
   <style>
     #sidebar { transition: margin 0.3s ease-in-out; }
     #sidebar.collapsed { margin-left: -280px; }
   </style>
-</head>
-<body class="d-flex vh-100 overflow-hidden bg-light">
-
   <div id="sidebar" class="d-flex flex-column flex-shrink-0 p-3 bg-white border-end shadow-sm z-3" style="width: 280px;">
     <a href="dashboard.php" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto link-dark text-decoration-none gap-2">
       <i class="fas fa-city fs-4 text-primary"></i>
@@ -96,7 +98,7 @@
     <hr>
     <ul class="nav nav-pills flex-column">
       <li class="nav-item">
-        <a href="../login/index.php?logout=true" class="nav-link text-danger d-flex align-items-center gap-3">
+        <a href="../logout/" class="nav-link text-danger d-flex align-items-center gap-3">
           <i class="fas fa-sign-out-alt fa-fw"></i> Logout
         </a>
       </li>
@@ -124,7 +126,7 @@
           <ul class="dropdown-menu dropdown-menu-end shadow">
             <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item text-danger" href="../login/index.php?logout=true"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+            <li><a class="dropdown-item text-danger" href="../logout/"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
           </ul>
         </div>
       </div>
@@ -321,6 +323,8 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <?php // Contains JS imports
+    require_once '../../components/footer.php';
+  ?>
 </body>
 </html>
