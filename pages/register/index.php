@@ -1,9 +1,8 @@
-<?php // Backend for Registration
-  require_once __DIR__ . '/../../functions/database/database.php';
-  require_once __DIR__ . '/../../functions/validations/validations.php';
-  require_once __DIR__ . '/../../functions/utility/response.php';
+<?php
+  require __DIR__ . '/../../bootstrap.php';
+?>
 
-  $pdo = connectDatabase();
+<?php // Backend for Registratio
 
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fullName = sanitizeInput($_POST['fullName'] ?? '');
@@ -74,10 +73,6 @@
 
   <title>CivicConnect - Create Account</title>
 
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- Bootstrap 5 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
