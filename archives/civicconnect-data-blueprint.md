@@ -1,37 +1,48 @@
 # CivicConnect data blueprint
 
-`issues` is the canonical public/assignable post. `issue_reports` stores every
-citizen submission, including submissions grouped into an existing nearby
-post. `issue_images` stores evidence and `issue_ai_analyses` stores each
-auditable model decision.
+This document describes the current database-backed implementation. The SQL source of truth is `assets/civicconnect.sql`; `assets/mock-heatmap.json` is no longer part of the heatmap data path.
 
-## Flow
+## Canonical issue flow
 
-1. An authenticated citizen submits an image, CSRF token, GPS coordinates,
-   category, and description to `api/issues/submit.php`.
-2. PHP validates the image MIME/signature/size and generates a random path.
-3. The Python service receives the relative filepath and returns category,
-   severity, confidence, manipulation status, and raw detections.
-4. PHP normalizes the category and searches the same category in a nearby
-   geohash prefix. A match adds a report and image to the existing post;
-   otherwise a new canonical issue is created.
-5. The database write is transactional. Failed persistence removes the image.
+1. An authenticated citizen submits an image, GPS/location, category, and description to `api/issues/submit.php`.
+2. PHP validates the request, CSRF token, image signature/MIME/size, and input lengths.
+3. The Python AI service returns normalized category, severity, confidence, manipulation status, model version, and raw output.
+4. PHP searches for a nearby issue with the same category using a geohash prefix.
+5. A match adds an `issue_reports` row and evidence to the canonical `issues` record; otherwise a new canonical issue is created.
+6. The report, image, AI analysis, and related fields are persisted transactionally.
+7. `assignments`, `work_requests`, and `status_history` extend the issue into an admin/worker workflow.
 
-## Heatmap
+## Tables
 
-`GET /api/stats/heatmap.php` groups active issues by geohash and returns
-`lat`, `lng`, `count`, `severity`, `weight`, and `band`. The initial display
-bands are green for 1–2 reports, yellow for 3–5, and red for 6 or more.
-`weight` can be passed to Leaflet.heat.
+| Table | Meaning |
+|---|---|
+| `users` | Three-role identity and account state. |
+| `issues` | Grouped operational issue and priority/location/status read model. |
+| `issue_reports` | Individual citizen evidence submissions. |
+| `issue_images` | Evidence metadata and storage reference. |
+| `issue_ai_analyses` | Auditable AI outputs. |
+| `assignments` | Admin-to-worker allocation and completion. |
+| `work_requests` | Worker requests plus admin review. |
+| `status_history` | Status transition audit trail. |
+| `upvotes` | Community corroboration. |
+| `fake_flags` | Potentially unreliable issue flags. |
+| `auth_login_attempts` | Login rate limiting. |
+| `remember_tokens` | Hashed persistent-login sessions. |
 
-## Feed and workflow APIs
+## Heatmap read model
 
-- `GET /api/issues/list.php`: priority-ordered grouped feed with image/report counts.
-- `GET /api/issues/detail.php?id=42`: images and status history.
-- `POST /api/issues/upvote.php`: one vote per authenticated user.
-- `POST`/`PUT /api/issues/status.php`: worker, authority, or admin status changes.
-- `GET /api/stats/city.php`: city KPIs and category counts.
+`GET /api/stats/heatmap.php` reads live issue data from MariaDB/MySQL, groups the visible issues by geohash/location, and returns points containing coordinates, count, category, status, severity, priority/weight, title, address, and density band. The initial bands are:
 
-State-changing requests require `X-CSRF-Token` or a `csrf_token` form field.
-Exact coordinates should remain internal; public responses should use rounded
-coordinates and production deployments should protect uploaded media.
+- green: 1–2 reports;
+- yellow: 3–5 reports;
+- red: 6 or more reports.
+
+The dedicated `pages/heatmap/index.php` page consumes this response with MapLibre GL. It is not Leaflet. The compact map on `pages/citizen/public-feed.php` uses the same database endpoint.
+
+## Assignment model
+
+`assignments.issue_id` identifies the canonical issue, `worker_id` identifies the executor, and `assigned_by` identifies the administrator. `completed_at` records completion. `work_requests` allows a worker to request either a specific issue or general work; an admin records approval/decline, reviewer, note, and time.
+
+## Privacy and integrity
+
+Coordinates are operationally sensitive. Public responses should expose only the precision required for the product experience. Prepared statements, role checks, CSRF validation, transactions, and escaped rendering are required for every new data path.

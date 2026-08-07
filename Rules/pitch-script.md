@@ -1,33 +1,31 @@
-# pitch-script.md
+# CivicConnect SIH pitch script
 
-## The High-Stakes Narrative Framework
-The final "Power Judging" presentation dictates our victory[cite: 1]. A brilliant technical solution will fail if the jury cannot rapidly understand its value proposition and real-world applicability[cite: 1]. Because of time anxiety, teams often speak at a frantic pace and overwhelm judges with technical jargon[cite: 1]. This document strictly enforces pacing, clarity, and narrative structure to ensure a persuasive delivery[cite: 1].
+## One-line pitch
 
-## The Mathematics of the 3-Minute Pitch
-Our pitch is strictly timeboxed to three minutes. This equates to approximately 390 to 420 spoken words (roughly 27 sentences)[cite: 1]. We will rigorously edit the script to fit this word count perfectly, ensuring a confident, unhurried delivery[cite: 1].
+**CivicConnect turns fragmented civic complaints into grouped, evidence-backed work items that administrators can allocate, field workers can complete, and citizens can transparently track.**
 
-### Phase Breakdown
-1.  **The Hook (10 seconds | ~25 words):** Capture attention instantly with a memorable team introduction and a striking, jargon-free one-line value proposition[cite: 1].
-2.  **The Problem (20 seconds | ~45 words):** Establish urgency using real-world data to show who is suffering and explicitly state why legacy solutions fail[cite: 1].
-3.  **The Architecture (60 seconds | ~130 words):** Prove technical competence through a high-level explanation of the tech stack, our engineering decisions, and scalability guarantees[cite: 1].
-4.  **Live Demo (60 seconds | ~130 words):** Provide visual proof via a guided, scenario-based walkthrough of the core user journey, showcasing the UI and backend integration[cite: 1].
-5.  **The Close (30 seconds | ~60 words):** Summarize long-term impact, the future scaling roadmap, and deliver a confident concluding statement[cite: 1].
+## Three-minute script
 
-## Pitching Best Practices
+Every day, citizens see potholes, garbage piles, broken streetlights, blocked drains, and waterlogging. The problem is not only that people cannot report them. The problem is what happens after the report: duplicates are scattered across channels, priorities are unclear, work ownership is invisible, and citizens do not know whether anything changed.
 
-*   **The Anti-Pleasantry Rule:** Do not waste the first ten seconds on generic pleasantries (e.g., "We are so happy to be here")[cite: 1]. The very first sentence must hit hard, establishing the problem and our solution mechanism immediately[cite: 1].
-*   **The "Power of Three" Framework:** To prevent cognitive overload for judges, highlight only the three most critical, disruptive functionalities of our application[cite: 1].
-*   **Show, Do Not Tell:** During the 60-second demo, shift from theoretical explanations to practical applications[cite: 1]. Narrate a relatable use case (e.g., "Imagine a rural supply chain manager logging in...") to make the visual storytelling highly persuasive[cite: 1].
-*   **Zero Volunteer Vulnerability:** Never organically bring up bugs, coding challenges, or unfinished features during the pitch[cite: 1]. Focus aggressively on our product's strengths[cite: 1].
+CivicConnect creates one shared evidence-to-action workflow. A citizen opens the web app, adds a photograph, location, category, and description, and submits the issue. Our AI service assists with category, severity, confidence, and possible image manipulation. The platform stores that analysis for audit, then looks for nearby reports of the same category. Instead of creating another isolated complaint, it preserves the new evidence inside one canonical issue cluster.
 
-## Jury Q&A Defense Strategy
-Following the pitch, the jury will aggressively probe our technical depth and scalability[cite: 1]. Our handling of this dictates the "Communication" and "Preparedness" scores[cite: 1]. We must pre-populate answers and prepare backup slides for the following axes:
+That cluster is visible in two ways. The Community Feed shows evidence count, upvotes, priority, status, and assignment information. City Pulse turns the live database into an interactive MapLibre map where an administrator can search, filter, select a dense area, and open the underlying issue. This turns a list of complaints into a spatial operating picture.
 
-*   **Technical Feasibility:** Be prepared to answer how the system handles concurrent requests at scale and how it behaves when rural internet connectivity drops[cite: 1]. Have backup slides with Mermaid.js architecture diagrams ready[cite: 1].
-*   **Security & Data Integrity:** Be prepared to explain how user data is encrypted (in transit and at rest) and how we prevent injection attacks[cite: 1].
-*   **Market Viability:** Be prepared to clearly differentiate our platform from existing legacy solutions or government portals[cite: 1].
+The workflow has exactly three active roles. Citizens report and track. Administrators see the city-wide backlog, allocate issues to active workers, and review worker requests. Field workers see their assignments, request additional work, update permitted statuses, and mark work complete. Citizens can see the assigned worker, assigning administrator, and current completion state, so the process is not a black box.
 
-## Reference Links for the Team
-*   [How to Create a Winning Hackathon Pitch (Taikai)](https://taikai.network/en/blog/how-to-create-a-hackathon-pitch)[cite: 1]
-*   [How to Build a Hackathon Pitch Deck That Judges Remember](https://www.inknarrates.com/post/hackathon-pitch-deck)[cite: 1]
-*   [Best3Minutes Guide to Hackathon Pitching (MIT)](https://best3minutes.com/wp-content/uploads/2020/05/Make-a-Winning-Hackathon-Pitch_MIT-COVID19.pdf)[cite: 1]
+The value is the connection between community evidence and operational ownership. We reduce duplicate operational work, improve triage, and create an auditable path from observation to action. The prototype already demonstrates database-backed grouping, AI-assisted intake, geographic intelligence, role-based authorization, and a complete admin-worker-citizen loop.
+
+Our roadmap is deliberately honest. The next stages are citizen-verified resolution with before/after evidence, SLA and escalation integrations, omnichannel access through WhatsApp/voice/low-bandwidth channels, and predictive recurrence/root-cause intelligence. Today, CivicConnect is the foundation: **from complaint management toward predictive civic resolution intelligence.**
+
+## Proof points to show live
+
+1. Landing metrics are read from the database.
+2. A feed issue contains grouped report/evidence counts.
+3. City Pulse loads from `api/stats/heatmap.php`, not a static mock file.
+4. An admin assignment appears to a worker and then to the citizen-facing feed.
+5. A worker status/completion action is rejected when the worker has no active assignment.
+
+## Claims to avoid
+
+Do not claim predictive forecasting, automatic municipal routing, citizen verification, WhatsApp/IVR, SLA escalation, or production deployment unless separately implemented and tested.

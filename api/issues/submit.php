@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/../../bootstrap.php';
+require_once __DIR__ . '/../../functions/ai/service.php';
 $bootstrapData = bootstrapAccounts();
 extract($bootstrapData);
 header('Content-Type: application/json; charset=utf-8');
@@ -14,21 +15,6 @@ $user = requireAuthentication($db instanceof PDO ? $db : null, ['citizen']);
 requireCsrfToken(json: true);
 if (!($db instanceof PDO)) {
   jsonResponse(503, 'The database is temporarily unavailable.');
-}
-
-function normalizedCategory(?string $category): string
-{
-  $category = strtolower(trim((string) $category));
-  $aliases = [
-    'pothole detection' => 'pothole', 'potholes' => 'pothole',
-    'garbage dump' => 'garbage', 'open drainage' => 'open_drain',
-    'drainage' => 'open_drain', 'street light' => 'streetlight',
-    'broken streetlight' => 'streetlight', 'fallen tree' => 'fallen_tree',
-    'road damage' => 'road_damage',
-  ];
-  $category = $aliases[$category] ?? $category;
-  $allowed = ['pothole', 'garbage', 'streetlight', 'waterlogging', 'road_damage', 'encroachment', 'graffiti', 'open_drain', 'fallen_tree', 'other', 'unknown'];
-  return in_array($category, $allowed, true) ? $category : 'other';
 }
 
 function storeUploadedIssueImage(array $file): array
@@ -70,69 +56,6 @@ function storeUploadedIssueImage(array $file): array
   ];
 }
 
-function clientAnalysisFallback(array $clientHint): array
-{
-  $category = normalizedCategory($clientHint['category'] ?? 'unknown');
-  $severityValue = strtolower(trim((string) ($clientHint['severity'] ?? '1')));
-  $severity = match ($severityValue) {
-    'critical' => 5,
-    'high' => 4,
-    'medium' => 3,
-    'low' => 2,
-    default => max(1, min(5, (int) $severityValue)),
-  };
-  $confidence = filter_var($clientHint['confidence'] ?? null, FILTER_VALIDATE_FLOAT);
-  $confidence = $confidence === false ? 0.0 : max(0.0, min(1.0, (float) $confidence));
-  $isManipulated = in_array((string) ($clientHint['is_manipulated'] ?? '0'), ['1', 'true', 'on'], true);
-
-  return [
-    'category' => $category,
-    'severity' => $severity,
-    'confidence' => $confidence,
-    'is_manipulated' => $isManipulated,
-    'model_version' => 'client-mock-v1',
-    'raw' => ['source' => 'client_mock_preview', 'category' => $category, 'severity' => $severityValue, 'confidence' => $confidence, 'is_manipulated' => $isManipulated],
-  ];
-}
-
-function callAIService(string $relativePath, array $clientHint = []): array
-{
-  $fallback = clientAnalysisFallback($clientHint);
-  if (!function_exists('curl_init')) {
-    return $fallback;
-  }
-  $ch = curl_init('http://127.0.0.1:8000/analyze');
-  $payload = json_encode(['filepath' => $relativePath], JSON_UNESCAPED_SLASHES);
-  if ($ch === false) {
-    return $fallback;
-  }
-  curl_setopt_array($ch, [
-    CURLOPT_POST => true, CURLOPT_POSTFIELDS => $payload,
-    CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json'],
-    CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 2, CURLOPT_TIMEOUT => 15,
-  ]);
-  $response = curl_exec($ch);
-  $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-  curl_close($ch);
-  $decoded = is_string($response) ? json_decode($response, true) : null;
-  if ($status !== 200 || !is_array($decoded) || ($decoded['success'] ?? true) === false) {
-    return $fallback;
-  }
-  $detectedCategory = normalizedCategory($decoded['category'] ?? 'unknown');
-  if ($detectedCategory === 'unknown' && $fallback['category'] !== 'unknown') {
-    $fallback['raw']['ai_service'] = $decoded;
-    return $fallback;
-  }
-  return [
-    'category' => $detectedCategory,
-    'severity' => max(1, min(5, (int) ($decoded['severity'] ?? 1))),
-    'confidence' => max(0.0, min(1.0, (float) ($decoded['confidence'] ?? 0))),
-    'is_manipulated' => !empty($decoded['is_manipulated']),
-    'model_version' => 'civicconnect-ai-service',
-    'raw' => $decoded,
-  ];
-}
-
 $latitude = filter_var($_POST['latitude'] ?? null, FILTER_VALIDATE_FLOAT);
 $longitude = filter_var($_POST['longitude'] ?? null, FILTER_VALIDATE_FLOAT);
 if ($latitude === false || $longitude === false || $latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180) {
@@ -144,19 +67,15 @@ $address = substr(trim((string) ($_POST['issueLocation'] ?? '')), 0, 500);
 $submittedCategory = normalizedCategory($_POST['issueCategory'] ?? 'other');
 $gpsAccuracy = filter_var($_POST['gps_accuracy'] ?? null, FILTER_VALIDATE_FLOAT);
 $gpsAccuracy = $gpsAccuracy === false ? null : max(0.0, min(10000.0, (float) $gpsAccuracy));
-$image = storeUploadedIssueImage($_FILES['issueImage'] ?? $_FILES['image'] ?? []);
-$ai = callAIService($image['relative_path'], [
-  'category' => $_POST['client_ai_category'] ?? $_POST['issueCategory'] ?? 'unknown',
-  'severity' => $_POST['client_ai_severity'] ?? 1,
-  'confidence' => $_POST['client_ai_confidence'] ?? 0,
-  'is_manipulated' => $_POST['client_ai_is_manipulated'] ?? '0',
-]);
-$category = $ai['category'] === 'unknown' ? $submittedCategory : $ai['category'];
-$severity = (int) $ai['severity'];
-$geohash = encodeGeohash((float) $latitude, (float) $longitude, 7);
-$rawAI = json_encode($ai['raw'] ?? $ai, JSON_UNESCAPED_SLASHES);
 
 try {
+  $image = storeUploadedIssueImage($_FILES['issueImage'] ?? $_FILES['image'] ?? []);
+  $ai = callAIService($image['relative_path']);
+  $category = $ai['category'] === 'unknown' ? $submittedCategory : $ai['category'];
+  $severity = (int) $ai['severity'];
+  $geohash = encodeGeohash((float) $latitude, (float) $longitude, 7);
+  $rawAI = json_encode($ai['raw'] ?? $ai, JSON_UNESCAPED_SLASHES);
+
   $db->beginTransaction();
   $duplicate = $db->prepare(
     "SELECT id FROM issues
@@ -193,7 +112,9 @@ try {
        WHERE id = ?'
     )->execute([$severity, $severity, $issueId]);
     $db->commit();
-    jsonResponse(201, 'Your report was grouped with an existing nearby issue.', ['issue_id' => $issueId, 'grouped' => true, 'category' => $category, 'ai' => $ai]);
+    $message = 'Your report was grouped with an existing nearby issue.';
+    setToast($message, 'success');
+    jsonResponse(201, $message, ['issue_id' => $issueId, 'grouped' => true, 'category' => $category, 'ai' => $ai]);
   }
 
   $title = ucfirst(str_replace('_', ' ', $category)) . ' reported nearby';
@@ -228,10 +149,15 @@ try {
   )->execute([$issueId, $reportId, $imageId, $category, $severity, $ai['confidence'], (int) $ai['is_manipulated'], $ai['model_version'], $rawAI]);
 
   $db->commit();
-  jsonResponse(201, 'Report submitted and analyzed.', ['issue_id' => $issueId, 'grouped' => false, 'category' => $category, 'ai' => $ai]);
+  $message = 'Report submitted and added to the community feed.';
+  setToast($message, 'success');
+  jsonResponse(201, $message, ['issue_id' => $issueId, 'grouped' => false, 'category' => $category, 'ai' => $ai]);
 } catch (Throwable $exception) {
   if ($db->inTransaction()) $db->rollBack();
   if (isset($image['absolute_path']) && is_file($image['absolute_path'])) unlink($image['absolute_path']);
   error_log('Issue submission failed: ' . $exception->getMessage());
+  if ($exception instanceof AIServiceException) {
+    jsonResponse(503, $exception->getMessage());
+  }
   jsonResponse(500, 'The report could not be saved. Please try again.');
 }

@@ -86,6 +86,23 @@ function fetchIssueFeed(PDO $db, array $options = []): array
             i.lat, i.lng, i.address, i.upvote_count, i.is_verified,
             i.ai_confidence, i.priority_score, i.created_at, i.updated_at,
             u.name AS reporter_name,
+            (SELECT worker.name
+               FROM assignments assignment
+               INNER JOIN users worker ON worker.id = assignment.worker_id
+              WHERE assignment.issue_id = i.id
+              ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
+              LIMIT 1) AS assigned_worker_name,
+            (SELECT administrator.name
+               FROM assignments assignment
+               LEFT JOIN users administrator ON administrator.id = assignment.assigned_by
+              WHERE assignment.issue_id = i.id
+              ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
+              LIMIT 1) AS assigned_by_name,
+            (SELECT assignment.completed_at
+               FROM assignments assignment
+              WHERE assignment.issue_id = i.id
+              ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
+              LIMIT 1) AS assignment_completed_at,
             (SELECT COUNT(*) FROM issue_images ii WHERE ii.issue_id = i.id) AS image_count,
             (SELECT COUNT(*) FROM issue_reports ir WHERE ir.issue_id = i.id) AS report_count,
             (SELECT COUNT(*) FROM status_history sh WHERE sh.issue_id = i.id) AS update_count,
@@ -161,11 +178,35 @@ function fetchCitizenDashboardData(PDO $db, int $userId): array
 
   $activityStmt = $db->prepare(
     "SELECT i.id, i.title, i.category, i.status, i.address, i.upvote_count,
-            i.created_at, i.updated_at,
-            MAX(ir.created_at) AS last_reported_at,
-            COUNT(ir.id) AS citizen_report_count,
-            (SELECT COUNT(*) FROM issue_images ii WHERE ii.issue_id = i.id) AS image_count,
-            (SELECT COUNT(*) FROM status_history sh WHERE sh.issue_id = i.id) AS update_count
+             i.created_at, i.updated_at,
+             (SELECT worker.name
+                FROM assignments assignment
+                INNER JOIN users worker ON worker.id = assignment.worker_id
+               WHERE assignment.issue_id = i.id
+               ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
+               LIMIT 1) AS assigned_worker_name,
+             (SELECT administrator.name
+                FROM assignments assignment
+                LEFT JOIN users administrator ON administrator.id = assignment.assigned_by
+               WHERE assignment.issue_id = i.id
+               ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
+               LIMIT 1) AS assigned_by_name,
+             (SELECT assignment.assigned_at
+                FROM assignments assignment
+               WHERE assignment.issue_id = i.id
+               ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
+               LIMIT 1) AS assigned_at,
+             (SELECT assignment.completed_at
+                FROM assignments assignment
+               WHERE assignment.issue_id = i.id
+               ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
+               LIMIT 1) AS assignment_completed_at,
+             MAX(ir.created_at) AS last_reported_at,
+             COUNT(ir.id) AS citizen_report_count,
+             (SELECT COUNT(*) FROM issue_images ii WHERE ii.issue_id = i.id) AS image_count,
+             (SELECT ii.file_path FROM issue_images ii
+               WHERE ii.issue_id = i.id ORDER BY ii.id ASC LIMIT 1) AS cover_path,
+             (SELECT COUNT(*) FROM status_history sh WHERE sh.issue_id = i.id) AS update_count
        FROM issues i
        INNER JOIN issue_reports ir ON ir.issue_id = i.id AND ir.reporter_id = ?
       GROUP BY i.id, i.title, i.category, i.status, i.address, i.upvote_count, i.created_at, i.updated_at
@@ -179,6 +220,7 @@ function fetchCitizenDashboardData(PDO $db, int $userId): array
     $row['citizen_report_count'] = (int) $row['citizen_report_count'];
     $row['image_count'] = (int) $row['image_count'];
     $row['update_count'] = (int) $row['update_count'];
+    $row['cover_url'] = issueImageUrl($row['cover_path'] ?? null);
     return $row;
   }, $activityStmt->fetchAll(PDO::FETCH_ASSOC));
 

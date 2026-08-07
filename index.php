@@ -1,5 +1,11 @@
 <?php // Bootstrapper + Backend Integration
   require __DIR__ . '/bootstrap.php';
+  $landingStats = getIssueStats(connectDatabase());
+  $landingTotal = (int) ($landingStats['total'] ?? 0);
+  $landingResolved = (int) ($landingStats['resolved'] ?? 0);
+  $landingResolutionRate = $landingTotal > 0
+    ? (int) round(($landingResolved / $landingTotal) * 100)
+    : 0;
 ?>
 <!doctype html>
 <html lang="en" data-theme="light">
@@ -17,7 +23,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <!-- Bootstrap 5 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -230,13 +236,6 @@
         }
 
         /* ===== HEATMAP STYLES ===== */
-        <img 
-            id="mapImagePreview"
-            class="map-image-preview" 
-            src="map.png" 
-            alt="Map Preview"
-            onclick="openImageModal()"
-        >
         .map-card {
             background: #ffffff;
             border-radius: 16px;
@@ -460,7 +459,7 @@
     <nav id="landingNavbar" class="navbar navbar-expand-lg sticky-top bg-white bg-opacity-80 backdrop-blur border-bottom" role="navigation" aria-label="Main navigation">
         <div class="container-fluid px-4">
             <!-- Brand -->
-            <a href="index.html" id="brandLink" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary" aria-label="CivicConnect Home">
+            <a href="index.php" id="brandLink" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary" aria-label="CivicConnect Home">
                 <span class="brand-icon d-inline-flex align-items-center justify-content-center rounded-3 text-white" style="width:36px;height:36px;background:var(--color-primary-gradient);">
                     <i class="fas fa-city"></i>
                 </span>
@@ -485,7 +484,7 @@
                         <a href="#testimonials" class="nav-link fw-medium text-secondary position-relative">Testimonials</a>
                     </li>
                     <li class="nav-item">
-                        <a href="#feed" class="nav-link fw-medium text-secondary position-relative active">Community Feed</a>
+                        <a href="pages/citizen/public-feed.php" class="nav-link fw-medium text-secondary position-relative">Community Feed</a>
                     </li>
                 </ul>
             </div>
@@ -563,16 +562,16 @@
                     
                     <div class="d-flex gap-5 pt-3 border-top">
                         <div>
-                            <span class="d-block display-6 fw-bold text-primary">12K+</span>
+                            <span class="d-block display-6 fw-bold text-primary"><?php echo formatNumber($landingTotal); ?></span>
                             <span class="text-secondary">Issues Reported</span>
                         </div>
                         <div>
-                            <span class="d-block display-6 fw-bold text-success">8.5K</span>
+                            <span class="d-block display-6 fw-bold text-success"><?php echo formatNumber($landingResolved); ?></span>
                             <span class="text-secondary">Issues Resolved</span>
                         </div>
                         <div>
-                            <span class="d-block display-6 fw-bold text-primary">94%</span>
-                            <span class="text-secondary">Satisfaction Rate</span>
+                            <span class="d-block display-6 fw-bold text-primary"><?php echo $landingResolutionRate; ?>%</span>
+                            <span class="text-secondary">Resolution Rate</span>
                         </div>
                     </div>
                 </div>
@@ -597,7 +596,7 @@
                     <span class="text-gradient">Improve Your City</span>
                 </h2>
                 <p class="text-secondary" style="max-width:640px;margin:0 auto;">
-                    Powerful tools for citizens, authorities, and administrators to work together
+                    Powerful tools for citizens, administrators, and field workers to work together
                 </p>
             </div>
             
@@ -704,8 +703,8 @@
                         <div class="d-inline-flex align-items-center justify-content-center rounded-3 bg-primary bg-opacity-10 text-primary mb-3" style="width:56px;height:56px;">
                             <i class="fas fa-tasks fs-3"></i>
                         </div>
-                        <h5 class="fw-semibold">Authority Takes Action</h5>
-                        <p class="text-secondary mb-0">Municipal authorities prioritize, assign to relevant departments, and update status in real-time.</p>
+                        <h5 class="fw-semibold">Administrators Coordinate Work</h5>
+                        <p class="text-secondary mb-0">Administrators review city-wide issues, allocate work to field workers, and keep citizens informed in real time.</p>
                     </div>
                 </div>
                 
@@ -858,37 +857,37 @@
                 <div class="col-6 col-md-3">
                     <h5 class="text-white mb-3">Platform</h5>
                     <ul class="list-unstyled">
-                        <li><a href="#features" class="text-white-50 text-decoration-none hover-text-white">Features</a></li>
-                        <li><a href="#how-it-works" class="text-white-50 text-decoration-none hover-text-white">How It Works</a></li>
-                        <li><a href="#" class="text-white-50 text-decoration-none hover-text-white">Pricing</a></li>
-                        <li><a href="#" class="text-white-50 text-decoration-none hover-text-white">FAQ</a></li>
+                        <li><a href="pages/citizen/public-feed.php" class="text-white-50 text-decoration-none hover-text-white">Community Feed</a></li>
+                        <li><a href="pages/heatmap/" class="text-white-50 text-decoration-none hover-text-white">City Pulse</a></li>
+                        <li><a href="pages/report/" class="text-white-50 text-decoration-none hover-text-white">Report an Issue</a></li>
+                        <li><a href="pages/register/" class="text-white-50 text-decoration-none hover-text-white">Create an Account</a></li>
                     </ul>
                 </div>
                 
                 <div class="col-6 col-md-3">
                     <h5 class="text-white mb-3">Support</h5>
                     <ul class="list-unstyled">
-                        <li><a href="#" class="text-white-50 text-decoration-none hover-text-white">Help Center</a></li>
-                        <li><a href="#" class="text-white-50 text-decoration-none hover-text-white">Contact Us</a></li>
-                        <li><a href="#" class="text-white-50 text-decoration-none hover-text-white">Privacy Policy</a></li>
-                        <li><a href="#" class="text-white-50 text-decoration-none hover-text-white">Terms of Service</a></li>
+                        <li><a href="pages/login/" class="text-white-50 text-decoration-none hover-text-white">Account Access</a></li>
+                        <li><a href="pages/citizen/public-feed.php" class="text-white-50 text-decoration-none hover-text-white">Track Reports</a></li>
+                        <li><a href="#how-it-works" class="text-white-50 text-decoration-none hover-text-white">How It Works</a></li>
+                        <li><a href="pages/heatmap/" class="text-white-50 text-decoration-none hover-text-white">Map Help</a></li>
                     </ul>
                 </div>
                 
                 <div class="col-6 col-md-2">
                     <h5 class="text-white mb-3">Company</h5>
                     <ul class="list-unstyled">
-                        <li><a href="#" class="text-white-50 text-decoration-none hover-text-white">About Us</a></li>
-                        <li><a href="#" class="text-white-50 text-decoration-none hover-text-white">Careers</a></li>
-                        <li><a href="#" class="text-white-50 text-decoration-none hover-text-white">Blog</a></li>
-                        <li><a href="#" class="text-white-50 text-decoration-none hover-text-white">Press Kit</a></li>
+                        <li><a href="#features" class="text-white-50 text-decoration-none hover-text-white">About the Platform</a></li>
+                        <li><a href="#testimonials" class="text-white-50 text-decoration-none hover-text-white">Community Stories</a></li>
+                        <li><a href="pages/login/" class="text-white-50 text-decoration-none hover-text-white">Staff Access</a></li>
+                        <li><a href="pages/register/" class="text-white-50 text-decoration-none hover-text-white">Join CivicConnect</a></li>
                     </ul>
                 </div>
             </div>
             
             <hr class="border-white-10 my-4">
             <div class="text-center">
-                <p class="mb-0">&copy; 2026 CivicConnect. All rights reserved. Built with ❤️ for smarter cities.</p>
+                <p class="mb-0">&copy; 2026 CivicConnect. All rights reserved. Built for smarter cities.</p>
             </div>
         </div>
     </footer>
@@ -898,7 +897,7 @@
     ============================================ -->
     
     <!-- Bootstrap 5 JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
         // ============================================
@@ -978,37 +977,6 @@
         });
 
         // ============================================
-        // IMAGE MODAL FUNCTION
-        // ============================================
-        function openImageModal() {
-            const imgSrc = document.getElementById('mapImagePreview').src;
-            const modal = document.createElement('div');
-            modal.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: rgba(0,0,0,0.9);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 9999;
-                cursor: pointer;
-                padding: 20px;
-            `;
-            modal.innerHTML = `
-                <img src="${imgSrc}" style="max-width: 90%; max-height: 90%; border-radius: 12px; object-fit: contain;">
-                <span style="position: absolute; top: 20px; right: 30px; color: white; font-size: 30px; cursor: pointer;">&times;</span>
-            `;
-            modal.onclick = function(e) {
-                if (e.target === modal || e.target.tagName === 'SPAN') {
-                    document.body.removeChild(modal);
-                }
-            };
-            document.body.appendChild(modal);
-        }
-
         // ============================================
         // SCROLL ANIMATION - Slide in from right
         // ============================================
@@ -1185,6 +1153,10 @@
         function renderPosts(posts) {
             const container = document.getElementById('feedPosts');
             currentPosts = posts;
+
+            // The live community feed is a separate database-backed page.
+            // Keep this legacy helper harmless if an old cached script calls it.
+            if (!container) return;
             
             container.innerHTML = '';
             

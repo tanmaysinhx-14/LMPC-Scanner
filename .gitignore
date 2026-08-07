@@ -3,9 +3,10 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
-# Contains merged trained dataset
-merge_datasets.py
-merged/
+# Contains classified trained dataset
+cls_data
+detection_to_cls.py
+cls_check.py
 
 # Contains raw trained dataset
 raw/
@@ -21,9 +22,9 @@ archives/pothole.yolov8
 archives/water_logging.yolov8
 
 # AI-Model based files
-yolov8n.pt
-quantize.py
+*.pt
 *.onnx
+quantize.py
 
 # User-specific files
 *.rsuser

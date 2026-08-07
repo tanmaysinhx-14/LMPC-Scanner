@@ -6,7 +6,7 @@ function getIssueStats(?PDO $db)
   }
 
   try {
-    $stmt = $db->query("SELECT COUNT(*) as total FROM issues");
+    $stmt = $db->query("SELECT COUNT(*) as total FROM issues WHERE status <> 'rejected'");
     $total = $stmt->fetch()['total'];
     $stmt = $db->query("SELECT COUNT(*) as open FROM issues WHERE status IN ('pending', 'acknowledged', 'in_progress')");
     $open = $stmt->fetch()['open'];
@@ -14,7 +14,7 @@ function getIssueStats(?PDO $db)
     $inProgress = $stmt->fetch()['in_progress'];
     $stmt = $db->query("SELECT COUNT(*) as resolved FROM issues WHERE status = 'resolved'");
     $resolved = $stmt->fetch()['resolved'];
-    $stmt = $db->query("SELECT COUNT(*) as reported FROM issues WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
+    $stmt = $db->query("SELECT COUNT(*) as reported FROM issues WHERE status <> 'rejected' AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
     $reported = $stmt->fetch()['reported'];
 
     return [

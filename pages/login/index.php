@@ -48,7 +48,6 @@
         }
         loginUser($db, $user, $rememberMe);
         switch ($user['role']) {
-          case 'authority': header('Location: ../authority/authority-dashboard.php'); break;
           case 'admin': header('Location: ../admin/admin-dashboard.php'); break;
           case 'worker': header('Location: ../worker/assignments.php'); break;
           default: header('Location: ../citizen/citizen-dashboard.php');
@@ -66,7 +65,7 @@
 <body class="d-flex flex-column min-vh-100">
   <nav class="navbar navbar-expand-lg sticky-top bg-body border-bottom shadow-sm">
     <div class="container-fluid px-4">
-      <a href="../../index.html" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary">
+      <a href="../../index.php" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary">
         <span class="d-inline-flex align-items-center justify-content-center rounded-3 text-white bg-primary" style="width:36px;height:36px;">
           <i class="fas fa-city"></i>
         </span>
@@ -107,7 +106,6 @@
                     <select id="loginRole" name="role" class="form-select border-start-0 ps-0" required>
                       <option value="">Select your role...</option>
                       <option value="citizen" <?php echo $selectedRole === 'citizen' ? 'selected' : ''; ?>>Citizen</option>
-                      <option value="authority" <?php echo $selectedRole === 'authority' ? 'selected' : ''; ?>>Municipal Authority</option>
                       <option value="worker" <?php echo $selectedRole === 'worker' ? 'selected' : ''; ?>>Field Worker</option>
                       <option value="admin" <?php echo $selectedRole === 'admin' ? 'selected' : ''; ?>>Administrator</option>
                     </select>
@@ -124,7 +122,6 @@
                       type="email" 
                       class="form-control border-start-0 ps-0" 
                       placeholder="Enter your email address" 
-                      value="mail.citizen@gmail.com"
                       required 
                       autocomplete="email" 
                       value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>"
@@ -141,8 +138,7 @@
                       name="password" 
                       type="password" 
                       class="form-control border-start-0 border-end-0 ps-0" 
-                      placeholder="Enter your password" 
-                      value="Citizen@123"
+                      placeholder="Enter your password"
                       required 
                       minlength="8" 
                       autocomplete="current-password"
@@ -158,7 +154,7 @@
                     <input id="rememberMe" name="rememberMe" class="form-check-input" type="checkbox" <?php echo isset($_POST['rememberMe']) ? 'checked' : ''; ?>>
                     <label for="rememberMe" class="form-check-label text-muted">Remember me</label>
                   </div>
-                  <a href="forgot-password.html" class="text-primary text-decoration-none fw-medium">Forgot password?</a>
+                  <span class="text-muted small">Contact an administrator to reset access</span>
                 </div>
 
                 <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrfToken(), ENT_QUOTES, 'UTF-8'); ?>">

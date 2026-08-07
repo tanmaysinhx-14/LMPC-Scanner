@@ -1,42 +1,37 @@
-# ui-guidelines.md
+# CivicConnect UI guidelines
 
-## The Minimalist Prototyping Strategy
-UI and UX are heavily weighted in Round 2 (Usability and Interface) and Round 3 (User Experience) of the SIH evaluation[cite: 1]. Attempting to build complex, intricately animated interfaces from scratch drains critical backend development time and results in fragile, buggy prototypes[cite: 1]. This design system prioritizes deployment speed, accessibility, and a minimalist aesthetic to ensure rapid prototyping that looks like enterprise-grade software[cite: 1].
+## Surfaces
 
-## Component-Driven Architecture
-We will use a utility-first CSS framework combined with an unstyled component library to achieve a high-fidelity deployment in 36 hours.
+- **Landing:** explain the product and route users to registration, login, feed, and City Pulse.
+- **Community Feed:** readable public issue stream with filters, evidence, status, assignment, and compact map preview.
+- **City Pulse:** map-first operational exploration with search, filters, clusters, and popups.
+- **Citizen dashboard/report:** personal reporting and tracking.
+- **Admin workspace:** city visibility, allocation, and request review.
+- **Worker workspace:** assigned work, requests, status, and completion.
 
-*   **Tech Stack:** Tailwind CSS + Shadcn UI[cite: 1].
-*   **Why Shadcn UI:** Unlike opaque component libraries where we fight internal styling overrides, Shadcn provides accessible (Radix UI) components that we copy and paste directly into our source code[cite: 1]. This gives us absolute control while providing an instant, premium aesthetic[cite: 1].
-*   **Mandatory Components:**
-    *   *Navigation:* Menubar, Drawer, Breadcrumb, Tabs (reduces cognitive load without complex state management)[cite: 1].
-    *   *Data:* Data Table, Card, Chart (handles high data density with built-in pagination)[cite: 1].
-    *   *Input:* Combobox, Input OTP, Checkbox (accessible primitives with smooth keyboard navigation)[cite: 1].
-    *   *Feedback:* Alert Dialog, Hover Card, Context Menu (keeps users in-context for a single-page app feel)[cite: 1].
+## Visual system
 
-## Minimalist Aesthetic Parameters
-We must adhere to these mathematical constraints to prevent arbitrary styling and visual clutter during the exhaustion of the hackathon sprint[cite: 1].
+- Operational pages use Bootstrap 5.3.3 plus `assets/css/civic-ui.css` and page styles.
+- Use Inter for readable UI text; DM Sans/Space Grotesk may support the City Pulse identity.
+- Use semantic Bootstrap colors for success, warning, danger, and primary actions.
+- Keep primary actions obvious and role-appropriate.
+- Use the shared toast system for server feedback.
+- Theme toggles must update both `data-theme` and `data-bs-theme`.
 
-### 1. The Color System (60-30-10 Rule)
-*   **Backgrounds (60%):** Pure white (`#FFFFFF`) or ultra-light grays (`#F8FAFC`) for light mode; deep slate (`#0F172A`) for dark mode[cite: 1].
-*   **Typography (30%):** Near-black (`#1E293B`) for primary text and muted gray (`#64748B`) for secondary text to ensure high contrast and accessibility scoring[cite: 1].
-*   **Primary Accent (10%):** A single brand color linked to the problem statement theme (e.g., forest green for agriculture, cobalt blue for enterprise)[cite: 1].
+## Interaction rules
 
-### 2. Spacing and Geometry
-*   **Grid:** Rely exclusively on Tailwind's 4-point grid system (`p-4`, `m-8`) to maintain consistent padding and margins[cite: 1].
-*   **Radii:** Use subtle border radii (`rounded-md` or `rounded-lg`) with faint borders (`border-gray-200`)[cite: 1].
-*   **Shadows:** Strictly forbid heavy drop shadows; use subtle, diffused elevation shadows only for modals, dropdowns, and floating action buttons[cite: 1].
+- Do not show a citizen-only report action to workers/admins.
+- Always provide a meaningful loading, empty, and error state.
+- Disable a submit/action control while its request is in flight.
+- Confirm destructive or irreversible actions.
+- Preserve keyboard focus and visible focus styles.
+- Use `aria-label`, `aria-live`, and semantic buttons for map/feed controls.
+- Escape user, AI, and database text before inserting it into HTML or map popups.
 
-### 3. Typographical Hierarchy
-*   **Fonts:** Use clean, sans-serif fonts[cite: 1].
-*   **Headers:** Heavy font weights and tight tracking (letter spacing) for an authoritative look[cite: 1].
-*   **Body:** Regular weights with optimized line heights (1.5 or 1.6) for sustained reading[cite: 1].
-*   **Microcopy:** Small, uppercase, heavily tracked text for badges and tags[cite: 1].
+## Content rules
 
-## Figma Translation Workflow
-For visual iteration before coding, use pre-built design systems that align with our stack (e.g., Preline Figma design system or Shadcn community UI kits)[cite: 1]. Because these Figma components map perfectly to Tailwind/React, transitioning from visual design to the functional prototype is nearly instantaneous, preserving backend engineering hours[cite: 1].
+Use “administrator” and “field worker”; do not present Authority as an active fourth role. Use “issue” for the canonical grouped record and “report” for an individual citizen submission. Never display fake operational metrics or imply roadmap features are already live.
 
-## Reference Links for the Team
-*   [Shadcn UI Foundation](https://ui.shadcn.com/)[cite: 1]
-*   [Shadcn UI Components](https://ui.shadcn.com/docs/components)[cite: 1]
-*   [Preline Figma Design System for Tailwind](https://preline.co/figma/)[cite: 1]
+## Responsive checks
+
+Test the navbar and action buttons at narrow widths, make filters stack cleanly, keep the map usable on touch screens, prevent long addresses/titles from overflowing, and ensure modals/toasts remain readable in both themes.

@@ -6,8 +6,21 @@
   extract($bootstrapData);
 ?>
 
-<?php // Backend for Citizen Registration
-  if(isset($_POST['registerCitizen'])) {
+<?php
+  $viewer = sessionUser();
+  $selectedRole = strtolower(trim((string) ($_POST['userRole'] ?? $_GET['role'] ?? 'citizen')));
+  $adminCount = null;
+  if ($db instanceof PDO) {
+    try {
+      $adminCount = (int) $db->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
+    } catch (Throwable $exception) {
+      error_log('Registration role check failed: ' . $exception->getMessage());
+    }
+  }
+?>
+
+<?php // Account registration for all supported roles
+  if (isset($_POST['registerAccount']) || isset($_POST['registerCitizen'])) {
     requireCsrfToken();
     $name = sanitizeInput($_POST['fullName'] ?? '');
     $email = strtolower(trim((string) ($_POST['email'] ?? '')));
@@ -17,8 +30,16 @@
     $password = (string) ($_POST['password'] ?? '');
     $confirmPassword = (string) ($_POST['confirmPassword'] ?? '');
     $requestedRole = strtolower(trim((string) ($_POST['userRole'] ?? '')));
-    $role = 'citizen';
+    $staffCode = trim((string) ($_POST['staffCode'] ?? ''));
+    $role = $requestedRole;
     $termsAccepted = isset($_POST['termsAccepted']);
+    $supportedRoles = ['citizen', 'worker', 'admin'];
+    $isStaffRole = in_array($role, ['worker', 'admin'], true);
+    $isAdminViewer = ($viewer['role'] ?? '') === 'admin';
+    $registrationKey = trim((string) (getenv('CIVIC_STAFF_REGISTRATION_KEY') ?: ''));
+    $isFirstAdmin = $role === 'admin' && $adminCount === 0;
+    $staffRegistrationAllowed = $isAdminViewer || $isFirstAdmin
+      || ($registrationKey !== '' && $staffCode !== '' && hash_equals($registrationKey, $staffCode));
 
     if (!$termsAccepted) {
       setToast('Agree to Terms and Conditions.', 'danger');
@@ -29,8 +50,11 @@
     elseif ($name === '' || !validateEmail($email) || !validatePassword($password)) {
       setToast('Enter a valid name, email, and strong password.', 'danger');
     }
-    elseif ($requestedRole !== 'citizen') {
-      setToast('Only citizen accounts can be created from this form.', 'danger');
+    elseif (!in_array($role, $supportedRoles, true)) {
+      setToast('Choose a valid CivicConnect role.', 'danger');
+    }
+    elseif ($isStaffRole && !$staffRegistrationAllowed) {
+      setToast('Worker and admin accounts can only be created by an admin, the first platform admin, or a valid staff registration key.', 'danger');
     }
     elseif ($password !== $confirmPassword) {
       setToast('Passwords entered do not match.', 'danger');
@@ -57,7 +81,7 @@
             'phone' => $phone
           ]);
 
-          setToast('User registered successfully.', 'success');
+          setToast(ucfirst($role) . ' account created successfully. You can sign in now.', 'success');
         }
       } 
       catch (PDOException $e) {
@@ -74,7 +98,7 @@
 <body class="d-flex flex-column min-vh-100">
   <nav class="navbar navbar-expand-lg sticky-top bg-body border-bottom shadow-sm">
     <div class="container">
-      <a href="../../index.html" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary">
+      <a href="../../index.php" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary">
         <span class="d-inline-flex align-items-center justify-content-center rounded-3 bg-primary text-white" style="width: 36px; height: 36px;">
           <i class="fas fa-city"></i>
         </span>
@@ -125,7 +149,6 @@
                       type="text" 
                       class="form-control" 
                       placeholder="Enter your full name" 
-                      value="First Citizen"
                       required 
                       autocomplete="name" 
                       value="<?php echo htmlspecialchars($_POST['fullName'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
@@ -149,7 +172,6 @@
                       type="email" 
                       class="form-control" 
                       placeholder="Enter your email address" 
-                      value="mail.citizen@gmail.com"
                       required 
                       autocomplete="email" 
                       value="<?php echo htmlspecialchars($_POST['email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
@@ -173,7 +195,6 @@
                       type="tel" 
                       class="form-control" 
                       placeholder="Enter your phone number" 
-                      value="+919876543210"
                       required 
                       autocomplete="tel" 
                       value="<?php echo htmlspecialchars($_POST['phone'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
@@ -195,7 +216,6 @@
                       type="password" 
                       class="form-control" 
                       placeholder="Create a strong password" 
-                      value="Citizen@123"
                       required 
                       minlength="8" 
                       autocomplete="new-password"
@@ -222,7 +242,6 @@
                       type="password" 
                       class="form-control" 
                       placeholder="Confirm your password" 
-                      value="Citizen@123"
                       required 
                       autocomplete="new-password"
                     />
@@ -239,10 +258,22 @@
                     <span class="input-group-text bg-body-tertiary"><i class="fas fa-user-tag text-secondary"></i></span>
                     <select id="userRole" name="userRole" class="form-select" required>
                       <option value="">Select your role...</option>
-                      <option value="citizen" <?php echo (isset($_POST['userRole']) && $_POST['userRole'] === 'citizen') ? 'selected' : ''; ?>>Citizen</option>
+                      <option value="citizen" <?php echo $selectedRole === 'citizen' ? 'selected' : ''; ?>>Citizen</option>
+                      <option value="worker" <?php echo $selectedRole === 'worker' ? 'selected' : ''; ?>>Worker</option>
+                      <option value="admin" <?php echo $selectedRole === 'admin' ? 'selected' : ''; ?>>Administrator</option>
                     </select>
                   </div>
-                  <div class="form-text">Staff accounts are created by an administrator.</div>
+                  <div class="form-text">Citizens report issues. Workers resolve assigned issues. Admins coordinate city operations.</div>
+                </div>
+
+                <!-- Staff registration key -->
+                <div class="mb-3 d-none" id="staffCodeGroup">
+                  <label for="staffCode" class="form-label fw-medium">Staff registration key</label>
+                  <div class="input-group">
+                    <span class="input-group-text bg-body-tertiary"><i class="fas fa-key text-secondary"></i></span>
+                    <input id="staffCode" name="staffCode" type="password" class="form-control" placeholder="Only required for public staff signup" autocomplete="off">
+                  </div>
+                  <div class="form-text">Admins do not need this key. Configure <code>CIVIC_STAFF_REGISTRATION_KEY</code> for controlled public staff signup.</div>
                 </div>
 
                 <!-- City -->
@@ -288,7 +319,7 @@
                 <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrfToken(), ENT_QUOTES, 'UTF-8'); ?>">
 
                 <!-- Submit -->
-                <button type="submit" name="registerCitizen" class="btn btn-primary w-100 py-2 mb-3 fw-medium">
+                <button type="submit" name="registerAccount" class="btn btn-primary w-100 py-2 mb-3 fw-medium">
                   <i class="fas fa-user-plus me-2"></i> Create Account
                 </button>
 
@@ -360,6 +391,20 @@
       }
     });
 
+    // Staff onboarding is visible in the same form but protected server-side.
+    document.addEventListener('DOMContentLoaded', function() {
+      const roleSelect = document.getElementById('userRole');
+      const staffCodeGroup = document.getElementById('staffCodeGroup');
+      const staffCode = document.getElementById('staffCode');
+      const syncStaffFields = () => {
+        const staffRole = roleSelect && ['worker', 'admin'].includes(roleSelect.value);
+        staffCodeGroup?.classList.toggle('d-none', !staffRole);
+        if (staffCode) staffCode.required = false;
+      };
+      roleSelect?.addEventListener('change', syncStaffFields);
+      syncStaffFields();
+    });
+
     // City Data Retriever 
     document.addEventListener('DOMContentLoaded', function() {
       const cityInput = document.getElementById('registerCity');
@@ -426,7 +471,7 @@
         confirmInput.addEventListener('keypress', function(e) {
           if (e.key === 'Enter') {
             e.preventDefault();
-            document.querySelector('button[name="registerCitizen"]').click();
+            document.querySelector('button[name="registerAccount"]').click();
           }
         });
       }

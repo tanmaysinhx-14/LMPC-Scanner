@@ -18,5 +18,17 @@ $issue['images'] = array_map(static function (array $image): array { $image['url
 $history = $db->prepare('SELECT sh.old_status, sh.new_status, sh.note, sh.created_at, u.name AS changed_by_name FROM status_history sh LEFT JOIN users u ON u.id = sh.changed_by WHERE sh.issue_id = ? ORDER BY sh.created_at ASC, sh.id ASC');
 $history->execute([(int) $issueId]);
 $issue['status_history'] = $history->fetchAll(PDO::FETCH_ASSOC);
+$assignment = $db->prepare(
+  'SELECT assignment.id, assignment.assigned_at, assignment.completed_at,
+          worker.name AS worker_name, administrator.name AS assigned_by_name
+     FROM assignments assignment
+     INNER JOIN users worker ON worker.id = assignment.worker_id
+     LEFT JOIN users administrator ON administrator.id = assignment.assigned_by
+    WHERE assignment.issue_id = ?
+    ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
+    LIMIT 1'
+);
+$assignment->execute([(int) $issueId]);
+$issue['assignment'] = $assignment->fetch(PDO::FETCH_ASSOC) ?: null;
 $issue['report_count'] = (int) $issue['report_count'];
 jsonResponse(200, 'Issue loaded.', ['issue' => $issue]);

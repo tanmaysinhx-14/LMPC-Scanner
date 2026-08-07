@@ -25,7 +25,7 @@ try {
     'viewer_id' => isLoggedIn() ? (int) $_SESSION['user_id'] : 0,
   ]);
 
-  $isStaff = in_array((string) ($_SESSION['user_role'] ?? ''), ['worker', 'authority', 'admin'], true);
+  $isStaff = in_array((string) ($_SESSION['user_role'] ?? ''), ['worker', 'admin'], true);
   if (!$isStaff) {
     foreach ($data['items'] as &$item) {
       $item['lat'] = round((float) ($item['lat'] ?? 0), 3);
