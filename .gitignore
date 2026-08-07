@@ -3,8 +3,25 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+# Contains merged trained dataset
+merge_datasets.py
 merged/
+
+# Contains raw trained dataset
 raw/
+
+# Contains run log of AI-Model training
+runs/
+
+# Unzipped Roboflow Dataset
+archives/fallen_tree.yolov8
+archives/garbage.yolov8
+archives/graffiti.yolov8
+archives/pothole.yolov8
+archives/water_logging.yolov8
+
+# AI-Model based files
+yolov8n.pt
 quantize.py
 *.onnx
 

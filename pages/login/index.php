@@ -99,20 +99,6 @@
                 <p class="text-muted">Sign in to your CivicConnect account</p>
               </div>
 
-              <?php if (!empty($successMessage)): ?>
-                <div class="alert alert-success d-flex align-items-center gap-2" role="alert">
-                  <i class="fas fa-check-circle"></i>
-                  <div><?php echo $successMessage; ?></div>
-                </div>
-              <?php endif; ?>
-
-              <?php if (!empty($error)): ?>
-                <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
-                  <i class="fas fa-exclamation-circle"></i>
-                  <div><?php echo htmlspecialchars($error); ?></div>
-                </div>
-              <?php endif; ?>
-
               <form method="POST" action="./index.php">
                 <div class="mb-3">
                   <label for="loginRole" class="form-label fw-medium">Login As <span class="text-danger">*</span></label>
@@ -132,7 +118,17 @@
                   <label for="loginEmail" class="form-label fw-medium">Email Address <span class="text-danger">*</span></label>
                   <div class="input-group">
                     <span class="input-group-text bg-body border-end-0 text-muted"><i class="fas fa-envelope"></i></span>
-                    <input id="loginEmail" name="email" type="email" class="form-control border-start-0 ps-0" placeholder="Enter your email address" required autocomplete="email" value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>">
+                    <input 
+                      id="loginEmail" 
+                      name="email" 
+                      type="email" 
+                      class="form-control border-start-0 ps-0" 
+                      placeholder="Enter your email address" 
+                      value="mail.citizen@gmail.com"
+                      required 
+                      autocomplete="email" 
+                      value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>"
+                    />
                   </div>
                 </div>
 
@@ -140,7 +136,17 @@
                   <label for="loginPassword" class="form-label fw-medium">Password <span class="text-danger">*</span></label>
                   <div class="input-group">
                     <span class="input-group-text bg-body border-end-0 text-muted"><i class="fas fa-lock"></i></span>
-                    <input id="loginPassword" name="password" type="password" class="form-control border-start-0 border-end-0 ps-0" placeholder="Enter your password" required minlength="8" autocomplete="current-password">
+                    <input 
+                      id="loginPassword" 
+                      name="password" 
+                      type="password" 
+                      class="form-control border-start-0 border-end-0 ps-0" 
+                      placeholder="Enter your password" 
+                      value="Citizen@123"
+                      required 
+                      minlength="8" 
+                      autocomplete="current-password"
+                    >
                     <button type="button" class="btn btn-outline-secondary border-start-0 text-muted" onclick="togglePassword()">
                       <i class="fas fa-eye" id="passwordIcon"></i>
                     </button>

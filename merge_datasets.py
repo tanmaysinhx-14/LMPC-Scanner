@@ -5,12 +5,11 @@ from pathlib import Path
 
 RAW = Path("raw")
 OUT = Path("merged")
-DATASETS = ["garbage", "fallen_tree", "graffiti"]
-TARGET_CLASSES = ["garbage", "fallen_tree", "graffiti"]
+DATASETS = ["garbage", "graffiti"]
+TARGET_CLASSES = ["garbage", "graffiti"]
 
 CLASS_MAP = {
     "garbage": "garbage",
-    "fallen_tree": "fallen_tree",
     "graffiti": "graffiti"
 }
 
@@ -62,6 +61,7 @@ for name in DATASETS:
                 dst_lbl.touch()
 
 merged_yaml = {
+    "path": "C:/Users/tanma/Desktop/GitHub/SIH-2026-Prototype/merged",
     "train": "train/images",
     "val": "valid/images",
     "test": "test/images",

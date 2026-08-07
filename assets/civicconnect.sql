@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Aug 06, 2026 at 08:37 PM
+-- Generation Time: Aug 07, 2026 at 01:41 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -35,6 +35,19 @@ CREATE TABLE `assignments` (
   `notes` text DEFAULT NULL,
   `assigned_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `completed_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `auth_login_attempts`
+--
+
+CREATE TABLE `auth_login_attempts` (
+  `identity_hash` char(64) NOT NULL,
+  `attempts` smallint(5) UNSIGNED NOT NULL DEFAULT 0,
+  `window_started_at` datetime NOT NULL,
+  `blocked_until` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -84,6 +97,26 @@ CREATE TABLE `issues` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `issue_ai_analyses`
+--
+
+CREATE TABLE `issue_ai_analyses` (
+  `id` int(11) NOT NULL,
+  `issue_id` int(11) NOT NULL,
+  `report_id` int(11) DEFAULT NULL,
+  `image_id` int(11) DEFAULT NULL,
+  `category` varchar(50) NOT NULL,
+  `severity` tinyint(4) NOT NULL DEFAULT 1,
+  `confidence` decimal(5,4) NOT NULL DEFAULT 0.0000,
+  `is_manipulated` tinyint(1) NOT NULL DEFAULT 0,
+  `model_version` varchar(100) DEFAULT NULL,
+  `raw_output` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`raw_output`)),
+  `analyzed_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `issue_images`
 --
 
@@ -98,6 +131,42 @@ CREATE TABLE `issue_images` (
   `sha256` char(64) DEFAULT NULL,
   `ai_raw_output` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`ai_raw_output`)),
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `issue_reports`
+--
+
+CREATE TABLE `issue_reports` (
+  `id` int(11) NOT NULL,
+  `issue_id` int(11) NOT NULL,
+  `reporter_id` int(11) NOT NULL,
+  `submitted_category` varchar(50) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `lat` decimal(10,8) NOT NULL,
+  `lng` decimal(11,8) NOT NULL,
+  `geohash` varchar(12) NOT NULL,
+  `gps_accuracy` decimal(10,2) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `remember_tokens`
+--
+
+CREATE TABLE `remember_tokens` (
+  `id` bigint(20) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `selector` char(36) NOT NULL,
+  `token_hash` char(64) NOT NULL,
+  `expires_at` datetime NOT NULL,
+  `user_agent_hash` char(64) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `last_used_at` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -140,57 +209,12 @@ CREATE TABLE `users` (
   `name` varchar(100) NOT NULL,
   `email` varchar(255) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
-  `role` enum('citizen','authority','worker','admin') DEFAULT 'citizen',
+  `role` enum('citizen','authority','worker','admin') NOT NULL DEFAULT 'citizen',
   `ward_id` int(11) DEFAULT NULL,
   `city` varchar(100) DEFAULT NULL,
   `phone` varchar(15) DEFAULT NULL,
   `is_active` tinyint(1) DEFAULT 1,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-CREATE TABLE `issue_reports` (
-  `id` int(11) NOT NULL,
-  `issue_id` int(11) NOT NULL,
-  `reporter_id` int(11) NOT NULL,
-  `submitted_category` varchar(50) DEFAULT NULL,
-  `description` text DEFAULT NULL,
-  `lat` decimal(10,8) NOT NULL,
-  `lng` decimal(11,8) NOT NULL,
-  `geohash` varchar(12) NOT NULL,
-  `gps_accuracy` decimal(10,2) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-CREATE TABLE `issue_ai_analyses` (
-  `id` int(11) NOT NULL,
-  `issue_id` int(11) NOT NULL,
-  `report_id` int(11) DEFAULT NULL,
-  `image_id` int(11) DEFAULT NULL,
-  `category` varchar(50) NOT NULL,
-  `severity` tinyint(4) NOT NULL DEFAULT 1 CHECK (`severity` between 1 and 5),
-  `confidence` decimal(5,4) NOT NULL DEFAULT 0.0000,
-  `is_manipulated` tinyint(1) NOT NULL DEFAULT 0,
-  `model_version` varchar(100) DEFAULT NULL,
-  `raw_output` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`raw_output`)),
-  `analyzed_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-CREATE TABLE `remember_tokens` (
-  `id` bigint(20) NOT NULL,
-  `user_id` int(11) NOT NULL,
-  `selector` char(36) NOT NULL,
-  `token_hash` char(64) NOT NULL,
-  `expires_at` datetime NOT NULL,
-  `user_agent_hash` char(64) DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `last_used_at` timestamp NULL DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-CREATE TABLE `auth_login_attempts` (
-  `identity_hash` char(64) NOT NULL,
-  `attempts` smallint(5) unsigned NOT NULL DEFAULT 0,
-  `window_started_at` datetime NOT NULL,
-  `blocked_until` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -209,6 +233,13 @@ INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `ward_id`, 
 --
 ALTER TABLE `assignments`
   ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `auth_login_attempts`
+--
+ALTER TABLE `auth_login_attempts`
+  ADD PRIMARY KEY (`identity_hash`),
+  ADD KEY `idx_login_blocked_until` (`blocked_until`);
 
 --
 -- Indexes for table `fake_flags`
@@ -230,14 +261,25 @@ ALTER TABLE `issues`
   ADD KEY `idx_priority` (`priority_score`);
 
 --
+-- Indexes for table `issue_ai_analyses`
+--
+ALTER TABLE `issue_ai_analyses`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_ai_issue` (`issue_id`),
+  ADD KEY `idx_ai_report` (`report_id`),
+  ADD KEY `idx_ai_category` (`category`);
+
+--
 -- Indexes for table `issue_images`
 --
 ALTER TABLE `issue_images`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `idx_issue_images_issue` (`issue_id`),
   ADD KEY `idx_issue_images_report` (`report_id`),
   ADD KEY `idx_issue_images_hash` (`sha256`);
 
+--
+-- Indexes for table `issue_reports`
+--
 ALTER TABLE `issue_reports`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_issue_reports_issue` (`issue_id`),
@@ -245,21 +287,14 @@ ALTER TABLE `issue_reports`
   ADD KEY `idx_issue_reports_geohash` (`geohash`),
   ADD KEY `idx_issue_reports_created` (`created_at`);
 
-ALTER TABLE `issue_ai_analyses`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `idx_ai_issue` (`issue_id`),
-  ADD KEY `idx_ai_report` (`report_id`),
-  ADD KEY `idx_ai_category` (`category`);
-
+--
+-- Indexes for table `remember_tokens`
+--
 ALTER TABLE `remember_tokens`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `unique_remember_selector` (`selector`),
   ADD KEY `idx_remember_user` (`user_id`),
   ADD KEY `idx_remember_expiry` (`expires_at`);
-
-ALTER TABLE `auth_login_attempts`
-  ADD PRIMARY KEY (`identity_hash`),
-  ADD KEY `idx_login_blocked_until` (`blocked_until`);
 
 --
 -- Indexes for table `status_history`
@@ -304,19 +339,28 @@ ALTER TABLE `issues`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `issue_ai_analyses`
+--
+ALTER TABLE `issue_ai_analyses`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `issue_images`
 --
 ALTER TABLE `issue_images`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
+--
+-- AUTO_INCREMENT for table `issue_reports`
+--
 ALTER TABLE `issue_reports`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
-ALTER TABLE `issue_ai_analyses`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
+--
+-- AUTO_INCREMENT for table `remember_tokens`
+--
 ALTER TABLE `remember_tokens`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `status_history`

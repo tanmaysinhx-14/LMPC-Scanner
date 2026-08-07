@@ -1,9 +1,0 @@
-Options -Indexes
-
-# Uploaded files are images only. Do not allow an uploaded file to execute as
-# a server-side script if the web server is Apache with PHP enabled.
-<FilesMatch "\.(php|phtml|phar|cgi|pl|py|jsp|asp|aspx)$">
-  Require all denied
-</FilesMatch>
-
-AddType text/plain .php .phtml .phar .cgi .pl .py .jsp .asp .aspx

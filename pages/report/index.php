@@ -6,6 +6,12 @@
   extract($bootstrapData);
 ?>
 
+<?php // Backend for Submit
+  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    
+  }
+?>
+
 <?php // Header (contains Unified Page Meta-Data and CSS imports)
   require_once __DIR__ . '/../../components/header.php';
 ?>
@@ -37,26 +43,24 @@
             </div>
 
             <div class="card-body p-4">
-              <form id="issueReportForm" method="POST" action="./">
+              <form id="issueReportForm" method="POST" action="./" enctype="multipart/form-data">
 
                 <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrfToken(), ENT_QUOTES, 'UTF-8'); ?>">
                 <input type="hidden" id="latitude" name="latitude" value="">
                 <input type="hidden" id="longitude" name="longitude" value="">
                 <input type="hidden" id="gpsAccuracy" name="gps_accuracy" value="">
+                <input type="hidden" id="previewAiCategory" name="client_ai_category" value="">
+                <input type="hidden" id="previewAiSeverity" name="client_ai_severity" value="">
+                <input type="hidden" id="previewAiConfidence" name="client_ai_confidence" value="">
+                <input type="hidden" id="previewAiManipulated" name="client_ai_is_manipulated" value="0">
 
                 <div class="mb-4">
                   <label class="form-label fw-semibold">Issue Photo <span class="text-danger">*</span></label>
                   <label class="d-block w-100 p-5 text-center border border-2 border-secondary-subtle rounded-3 bg-light border-dashed" for="issueImage">
                     <i class="fas fa-camera fs-1 text-secondary mb-3"></i>
                     <span class="d-block text-secondary">Tap to capture or <strong class="text-primary">upload image</strong></span>
-                    <input type="file"
-                      id="issueImage"
-                      name="issueImage"
-                      accept="image/*"
-                      capture="environment"
-                      class="d-none"
-                      required>
                   </label>
+                  <input type="file" id="issueImage" name="issueImage" accept="image/*" capture="environment" class="d-none" required>
                 </div>
 
                 <div id="imagePreviewContainer" class="d-none mb-4 position-relative border rounded-3 p-2 bg-light align-items-center">
@@ -79,6 +83,9 @@
                       <span class="small fw-semibold text-primary"><i class="fas fa-robot me-2"></i>AI Analysis Complete</span>
                       <span id="aiConfidence" class="badge bg-success"></span>
                     </div>
+                    <p class="small mb-0 text-dark">
+                      Detected Issue: <strong id="severityCategory" class="text-danger ms-1"></strong>
+                    </p>
                     <p class="small mb-0 text-dark">
                       Detected Severity: <strong id="severityDisplay" class="text-danger ms-1"></strong>
                     </p>
@@ -157,30 +164,23 @@
     require_once __DIR__ . '/../../components/footer.php';
   ?>
   <script type="text/javascript">
-    let currentLocation = null;
-    const toastElement = document.getElementById('statusToast');
-    const bsToast = new bootstrap.Toast(toastElement);
-
-    function showToast(message, type = 'primary') {
-      const toastMsg = document.getElementById('toastMessage');
-      toastElement.className = `toast align-items-center text-bg-${type} border-0`;
-
-      const icon = type === 'danger' ? 'fa-exclamation-triangle' : (type === 'success' ? 'fa-check-circle' : 'fa-info-circle');
-      toastMsg.innerHTML = `<i class="fas ${icon} me-2"></i> ${message}`;
-
-      bsToast.show();
+    function showToast(message, type = 'info') {
+      const toast = document.getElementById('statusToast');
+      const toastMessage = document.getElementById('toastMessage');
+      toastMessage.textContent = message;
+      toast.className = `toast align-items-center border-0 text-bg-${type}`;
+      bootstrap.Toast.getOrCreateInstance(toast, { delay: 6000 }).show();
     }
+
+    let currentLocation = null;
 
     async function fetchGPS() {
       return new Promise((resolve) => {
         if (!navigator.geolocation) {
-          resolve({
-            lat: null,
-            lng: null,
-            source: 'manual'
-          });
-          return;
+          showToast("Location requires HTTPS or is unsupported by this browser.", "danger");
+          return resolve({ lat: null, lng: null, source: 'manual' });
         }
+        
         navigator.geolocation.getCurrentPosition(
           pos => resolve({
             lat: pos.coords.latitude,
@@ -188,13 +188,12 @@
             accuracy: pos.coords.accuracy,
             source: 'gps'
           }),
-          () => resolve({
-            lat: null,
-            lng: null,
-            source: 'manual'
-          }), {
-            timeout: 8000,
-            enableHighAccuracy: true
+          (err) => {
+            showToast("Failed to acquire GPS. Please ensure location permissions are enabled.", "danger");
+            resolve({ lat: null, lng: null, source: 'manual' });
+          }, {
+            timeout: 15000, // Increased to prevent silent timeout drops
+            enableHighAccuracy: true // Drastically improves success rate on standard web connections
           }
         );
       });
@@ -260,6 +259,10 @@
       document.getElementById('imagePreviewContainer').classList.replace('d-flex', 'd-none');
       document.getElementById('aiResultCard').classList.add('d-none');
       document.getElementById('category').value = '';
+      document.getElementById('previewAiCategory').value = '';
+      document.getElementById('previewAiSeverity').value = '';
+      document.getElementById('previewAiConfidence').value = '';
+      document.getElementById('previewAiManipulated').value = '0';
     });
 
     document.getElementById('issueImage').addEventListener('change', async (e) => {
@@ -268,6 +271,7 @@
 
       const container = document.getElementById('imagePreviewContainer');
       document.getElementById('previewImg').src = URL.createObjectURL(file);
+      document.getElementById('previewName').textContent = file.name; // Updates the UI with actual filename
       container.classList.replace('d-none', 'd-flex');
 
       showSkeleton();
@@ -288,9 +292,15 @@
         }
       };
 
-      document.getElementById('category').value = result.data.category;
+      document.getElementById('severityCategory').textContent = result.data.category;
       document.getElementById('severityDisplay').textContent = result.data.severity;
       document.getElementById('aiConfidence').textContent = `${Math.round(result.data.confidence * 100)}% Match`;
+      document.getElementById('previewAiCategory').value = result.data.category;
+      document.getElementById('previewAiSeverity').value = result.data.severity;
+      document.getElementById('previewAiConfidence').value = result.data.confidence;
+      document.getElementById('previewAiManipulated').value = result.data.is_manipulated ? '1' : '0';
+
+      document.getElementById('category').value = result.data.category;
 
       if (result.data.is_manipulated) {
         showToast('Warning: This image may have been altered.', 'danger');
@@ -303,11 +313,14 @@
       e.preventDefault();
 
       const form = e.target;
+      const submitButton = form.querySelector('button[type="submit"]');
       if (!document.getElementById('latitude').value || !document.getElementById('longitude').value) {
         showToast('Location permission is required so this report can be placed on the city map.', 'danger');
         return;
       }
       const formData = new FormData(form);
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Saving report...';
 
       try {
         const response = await fetch('../../api/issues/submit.php', {
@@ -321,8 +334,11 @@
 
         const result = await response.json();
 
-        if (result.status === 'success') {
-          showToast('Report submitted and AI triggered!', 'success');
+        if (Number(result.status) >= 200 && Number(result.status) < 300) {
+          const groupedMessage = result.data?.grouped
+            ? 'Your report was added to an existing nearby issue.'
+            : 'Report saved and added to the public feed.';
+          showToast(groupedMessage, 'success');
           form.reset();
           document.getElementById('removeImageBtn').click();
           initLocation();
@@ -330,7 +346,10 @@
           showToast('Server error: ' + result.message, 'danger');
         }
       } catch (error) {
-        showToast('Failed to connect to the server.', 'danger');
+        showToast(error.message || 'Failed to connect to the server.', 'danger');
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Submit Report';
       }
     });
   </script>

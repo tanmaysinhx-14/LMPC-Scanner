@@ -8,6 +8,7 @@
 
   require_once __DIR__ . '/functions/utility/response.php';
   require_once __DIR__ . '/functions/utility/stats.php';
+  require_once __DIR__ . '/functions/issues/issues.php';
   require_once __DIR__ . '/functions/utility/toast.php';
   require_once __DIR__ . '/functions/utility/utility.php';
 

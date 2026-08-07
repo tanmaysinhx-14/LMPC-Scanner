@@ -107,14 +107,6 @@
                 <p class="text-secondary mb-0">Join CivicConnect and make your city better</p>
               </div>
 
-              <!-- Error Messages -->
-              <?php if (isset($error)): ?>
-                <div class="alert alert-danger d-flex align-items-center gap-2 rounded-3">
-                  <i class="fas fa-exclamation-circle"></i>
-                  <?php echo htmlspecialchars($error); ?>
-                </div>
-              <?php endif; ?>
-
               <!-- Registration Form -->
               <form method="POST" action="./index.php" novalidate>
 
@@ -133,6 +125,7 @@
                       type="text" 
                       class="form-control" 
                       placeholder="Enter your full name" 
+                      value="First Citizen"
                       required 
                       autocomplete="name" 
                       value="<?php echo htmlspecialchars($_POST['fullName'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
@@ -156,6 +149,7 @@
                       type="email" 
                       class="form-control" 
                       placeholder="Enter your email address" 
+                      value="mail.citizen@gmail.com"
                       required 
                       autocomplete="email" 
                       value="<?php echo htmlspecialchars($_POST['email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
@@ -179,6 +173,7 @@
                       type="tel" 
                       class="form-control" 
                       placeholder="Enter your phone number" 
+                      value="+919876543210"
                       required 
                       autocomplete="tel" 
                       value="<?php echo htmlspecialchars($_POST['phone'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
@@ -200,6 +195,7 @@
                       type="password" 
                       class="form-control" 
                       placeholder="Create a strong password" 
+                      value="Citizen@123"
                       required 
                       minlength="8" 
                       autocomplete="new-password"
@@ -226,6 +222,7 @@
                       type="password" 
                       class="form-control" 
                       placeholder="Confirm your password" 
+                      value="Citizen@123"
                       required 
                       autocomplete="new-password"
                     />
