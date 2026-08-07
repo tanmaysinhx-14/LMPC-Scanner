@@ -1,4 +1,4 @@
-<?php 
+<?php
   require __DIR__ . '/../../bootstrap.php';
 
   $bootstrapData = bootstrapAccounts(
@@ -11,22 +11,11 @@
 ?>
 
 <?php
-  if (ini_get("session.use_cookies")) {
-    $params = session_get_cookie_params();
-    setcookie(session_name(), '', time() - 42000,
-      $params["path"], $params["domain"],
-      $params["secure"], $params["httponly"]
-    );
-  }
-
-  session_destroy();
-
-  setcookie('user_email', '', time() - 3600, '/');
-  setcookie('user_role', '', time() - 3600, '/');
+  logoutUser($db instanceof PDO ? $db : null);
 ?>
 
 <?php
-  require_once '../../components/header.php';
+  require_once __DIR__ . '/../../components/header.php';
 ?>
 
 <body class="d-flex flex-column min-vh-100">
@@ -78,8 +67,8 @@
   </section>
 
   <?php
-    require_once '../../components/bottom-credits.php';
-    require_once '../../components/footer.php';
+    require_once __DIR__ . '/../../components/bottom-credits.php';
+    require_once __DIR__ . '/../../components/footer.php';
   ?>
 
   <script src="../../assets/js/index.js" type="text/javascript"></script>

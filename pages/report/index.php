@@ -1,13 +1,13 @@
 <?php // Bootstrapper
   require __DIR__ . '/../../bootstrap.php';
 
-  $bootstrapData = bootstrapAccounts();
+  $bootstrapData = bootstrapAccounts(options: ['required_roles' => ['citizen']]);
 
   extract($bootstrapData);
 ?>
 
 <?php // Header (contains Unified Page Meta-Data and CSS imports)
-  require_once '../../components/header.php';
+  require_once __DIR__ . '/../../components/header.php';
 ?>
 
 <body>
@@ -38,6 +38,11 @@
 
             <div class="card-body p-4">
               <form id="issueReportForm" method="POST" action="./">
+
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrfToken(), ENT_QUOTES, 'UTF-8'); ?>">
+                <input type="hidden" id="latitude" name="latitude" value="">
+                <input type="hidden" id="longitude" name="longitude" value="">
+                <input type="hidden" id="gpsAccuracy" name="gps_accuracy" value="">
 
                 <div class="mb-4">
                   <label class="form-label fw-semibold">Issue Photo <span class="text-danger">*</span></label>
@@ -149,7 +154,7 @@
   </div>
 
   <?php // Contains JS imports
-    require_once '../../components/footer.php';
+    require_once __DIR__ . '/../../components/footer.php';
   ?>
   <script type="text/javascript">
     let currentLocation = null;
@@ -197,18 +202,27 @@
 
     async function initLocation() {
       const locInput = document.getElementById('location');
+      const latitudeInput = document.getElementById('latitude');
+      const longitudeInput = document.getElementById('longitude');
+      const accuracyInput = document.getElementById('gpsAccuracy');
       locInput.value = "Acquiring GPS...";
       locInput.classList.add('bg-light');
 
       currentLocation = await fetchGPS();
 
-      if (currentLocation.lat) {
+      if (currentLocation.lat !== null && currentLocation.lng !== null) {
         locInput.value = `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}`;
+        latitudeInput.value = currentLocation.lat;
+        longitudeInput.value = currentLocation.lng;
+        accuracyInput.value = currentLocation.accuracy ?? '';
       } else {
         locInput.value = "";
+        latitudeInput.value = '';
+        longitudeInput.value = '';
+        accuracyInput.value = '';
         locInput.removeAttribute('readonly');
         locInput.classList.remove('bg-light');
-        locInput.placeholder = "Enter location manually";
+        locInput.placeholder = "Enable GPS to submit a report";
       }
     }
 
@@ -289,6 +303,10 @@
       e.preventDefault();
 
       const form = e.target;
+      if (!document.getElementById('latitude').value || !document.getElementById('longitude').value) {
+        showToast('Location permission is required so this report can be placed on the city map.', 'danger');
+        return;
+      }
       const formData = new FormData(form);
 
       try {

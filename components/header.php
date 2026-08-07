@@ -23,7 +23,7 @@
         role="alert"
         data-duration="<?= (int) $toast['duration'] ?>">
         <div class="toast-body">
-          <?= $toast['message']; ?>
+          <?= htmlspecialchars((string) $toast['message'], ENT_QUOTES, 'UTF-8'); ?>
         </div>
       </div>
     <?php endforeach; ?>

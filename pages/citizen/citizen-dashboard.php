@@ -3,7 +3,7 @@
 
   $bootstrapData = bootstrapAccounts(
     options: [
-      'require_login' => true // Page accessible to logged out users only
+      'required_roles' => ['citizen']
     ]
   );
   
@@ -80,7 +80,7 @@ $communityIssues = [
 ?>
 
 <?php // Header (contains Unified Page Meta-Data and CSS imports)
-  require_once '../../components/header.php';
+  require_once __DIR__ . '/../../components/header.php';
 ?>
 
 <body class="d-flex vh-100 overflow-hidden bg-light">
@@ -343,7 +343,7 @@ $communityIssues = [
   </div>
 
   <?php // Contains JS imports
-    require_once '../../components/footer.php';
+    require_once __DIR__ . '/../../components/footer.php';
   ?>
 </body>
 </html>

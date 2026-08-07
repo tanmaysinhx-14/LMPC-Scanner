@@ -7,10 +7,14 @@
 ?>
 
 <?php // Backend for Login
-  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = sanitizeInput($_POST['email'] ?? '');
-    $password = sanitizeInput($_POST['password'] ?? '');
-    $selectedRole = sanitizeInput($_POST['role'] ?? '');
+  $email = '';
+  $selectedRole = '';
+
+  if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    requireCsrfToken();
+    $email = strtolower(trim((string) ($_POST['email'] ?? '')));
+    $password = (string) ($_POST['password'] ?? '');
+    $selectedRole = strtolower(trim((string) ($_POST['role'] ?? '')));
     $rememberMe = isset($_POST['rememberMe']);
 
     if (empty($email) || empty($password) || empty($selectedRole)) {
@@ -22,60 +26,41 @@
     elseif (!validatePassword($password)) {
       setToast('Password must be at least 8 characters long, contain at least one number, and one symbol.', type: 'danger');
     } 
+    elseif (!($db instanceof PDO)) {
+      setToast('The service is temporarily unavailable. Please try again later.', type: 'danger');
+    }
+    elseif (isLoginRateLimited($db, $email)) {
+      setToast('Too many sign-in attempts. Please wait 15 minutes and try again.', type: 'danger');
+    }
     else {
-      $stmt = $db->prepare("SELECT * FROM users WHERE email = ?");
+      $stmt = $db->prepare('SELECT id, name, email, password_hash, role, ward_id, city, is_active FROM users WHERE email = ? LIMIT 1');
       $stmt->execute([$email]);
       $user = $stmt->fetch();
 
-      if (!$user) {
-        setToast('No account found with this email address.', type: 'danger');
-      } 
-      else {
-        if ($password !== $user['password_hash'] && !password_verify($password, $user['password_hash'])) {
-          setToast('Invalid password. Please try again.', type: 'danger');
-        } 
-        elseif ($user['role'] !== $selectedRole) {
-          setToast("You are registered as a " . ucfirst($user['role']) . ". Please select the correct role.", type: 'danger');
-        } 
-        else {
-          $_SESSION['user_id'] = $user['id'];
-          $_SESSION['user_name'] = $user['full_name'];
-          $_SESSION['user_email'] = $user['email'];
-          $_SESSION['user_role'] = $user['role'];
-          $_SESSION['logged_in'] = true;
-
-          if ($rememberMe) {
-            setcookie('user_email', $email, time() + (86400 * 30), "/");
-            setcookie('user_role', $user['role'], time() + (86400 * 30), "/");
-          }
-
-          switch ($user['role']) {
-            case 'citizen':
-              header("Location: ../citizen/citizen-dashboard.php");
-              break;
-            case 'authority':
-              header("Location: ../authority/citizen-dashboard.php");
-              break;
-            case 'admin':
-              header("Location: ../admin/citizen-dashboard.php");
-              break;
-            default:
-              header("Location: ../citizen/citizen-dashboard.php");
-          }
-          exit();
+      if (!$user || (int) $user['is_active'] !== 1 || !password_verify($password, $user['password_hash']) || $user['role'] !== $selectedRole) {
+        recordLoginFailure($db, $email);
+        setToast('Invalid email, password, or account role.', type: 'danger');
+      } else {
+        clearLoginFailures($db, $email);
+        if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
+          $rehash = $db->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+          $rehash->execute([password_hash($password, PASSWORD_DEFAULT), (int) $user['id']]);
         }
+        loginUser($db, $user, $rememberMe);
+        switch ($user['role']) {
+          case 'authority': header('Location: ../authority/authority-dashboard.php'); break;
+          case 'admin': header('Location: ../admin/admin-dashboard.php'); break;
+          case 'worker': header('Location: ../worker/assignments.php'); break;
+          default: header('Location: ../citizen/citizen-dashboard.php');
+        }
+        exit();
       }
     }
-  }
-
-  if (isset($_COOKIE['user_email']) && isset($_COOKIE['user_role'])) {
-    $email = $_COOKIE['user_email'];
-    $role = $_COOKIE['user_role'];
   }
 ?>
 
 <?php // Header (contains Unified Page Meta-Data and CSS imports)
-  require_once '../../components/header.php';
+  require_once __DIR__ . '/../../components/header.php';
 ?>
 
 <body class="d-flex flex-column min-vh-100">
@@ -135,9 +120,10 @@
                     <span class="input-group-text bg-body border-end-0 text-muted"><i class="fas fa-user-tag"></i></span>
                     <select id="loginRole" name="role" class="form-select border-start-0 ps-0" required>
                       <option value="">Select your role...</option>
-                      <option value="citizen" selected>Citizen</option>
-                      <option value="authority">Municipal Authority</option>
-                      <option value="admin">Administrator</option>
+                      <option value="citizen" <?php echo $selectedRole === 'citizen' ? 'selected' : ''; ?>>Citizen</option>
+                      <option value="authority" <?php echo $selectedRole === 'authority' ? 'selected' : ''; ?>>Municipal Authority</option>
+                      <option value="worker" <?php echo $selectedRole === 'worker' ? 'selected' : ''; ?>>Field Worker</option>
+                      <option value="admin" <?php echo $selectedRole === 'admin' ? 'selected' : ''; ?>>Administrator</option>
                     </select>
                   </div>
                 </div>
@@ -146,7 +132,7 @@
                   <label for="loginEmail" class="form-label fw-medium">Email Address <span class="text-danger">*</span></label>
                   <div class="input-group">
                     <span class="input-group-text bg-body border-end-0 text-muted"><i class="fas fa-envelope"></i></span>
-                    <input id="loginEmail" name="email" type="email" class="form-control border-start-0 ps-0" placeholder="Enter your email address" required autocomplete="email" value="mail.citizen@gmail.com">
+                    <input id="loginEmail" name="email" type="email" class="form-control border-start-0 ps-0" placeholder="Enter your email address" required autocomplete="email" value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>">
                   </div>
                 </div>
 
@@ -154,7 +140,7 @@
                   <label for="loginPassword" class="form-label fw-medium">Password <span class="text-danger">*</span></label>
                   <div class="input-group">
                     <span class="input-group-text bg-body border-end-0 text-muted"><i class="fas fa-lock"></i></span>
-                    <input id="loginPassword" name="password" type="password" class="form-control border-start-0 border-end-0 ps-0" placeholder="Enter your password" required minlength="8" autocomplete="current-password" value="Citizen@123">
+                    <input id="loginPassword" name="password" type="password" class="form-control border-start-0 border-end-0 ps-0" placeholder="Enter your password" required minlength="8" autocomplete="current-password">
                     <button type="button" class="btn btn-outline-secondary border-start-0 text-muted" onclick="togglePassword()">
                       <i class="fas fa-eye" id="passwordIcon"></i>
                     </button>
@@ -168,6 +154,8 @@
                   </div>
                   <a href="forgot-password.html" class="text-primary text-decoration-none fw-medium">Forgot password?</a>
                 </div>
+
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrfToken(), ENT_QUOTES, 'UTF-8'); ?>">
 
                 <button type="submit" name="loginSubmit" class="btn btn-primary w-100 py-2 mb-3 fw-medium">
                   <i class="fas fa-sign-in-alt me-2"></i>Sign In
@@ -191,8 +179,8 @@
   </section>
 
   <?php // Contains Bottom-Credits and JS imports
-    require_once '../../components/bottom-credits.php';
-    require_once '../../components/footer.php';
+    require_once __DIR__ . '/../../components/bottom-credits.php';
+    require_once __DIR__ . '/../../components/footer.php';
   ?>
 
   <script src="../../assets/js/index.js" type="text/javascript"></script>

@@ -5,7 +5,43 @@ function encodeGeohash(float $lat, float $lng, int $precision = 7): string
 {
   // Standard geohash encoding — precision 7 ≈ ±76m cell
   // Use a library: composer require ezimuel/geohash  OR implement encode()
-  return \Geohash\Geohash::encode($lat, $lng, $precision);
+  $lat = max(-90.0, min(90.0, $lat));
+  $lng = max(-180.0, min(180.0, $lng));
+  $precision = max(1, min(12, $precision));
+  $alphabet = '0123456789bcdefghjkmnpqrstuvwxyz';
+  $latRange = [-90.0, 90.0];
+  $lngRange = [-180.0, 180.0];
+  $hash = '';
+  $bit = 0;
+  $charIndex = 0;
+  $evenBit = true;
+
+  while (strlen($hash) < $precision) {
+    $range = $evenBit ? $lngRange : $latRange;
+    $value = $evenBit ? $lng : $lat;
+    $mid = ($range[0] + $range[1]) / 2;
+    $charIndex = ($charIndex << 1) | ($value >= $mid ? 1 : 0);
+
+    if ($value >= $mid) {
+      $range[0] = $mid;
+    } else {
+      $range[1] = $mid;
+    }
+    if ($evenBit) {
+      $lngRange = $range;
+    } else {
+      $latRange = $range;
+    }
+
+    if (++$bit === 5) {
+      $hash .= $alphabet[$charIndex];
+      $bit = 0;
+      $charIndex = 0;
+    }
+    $evenBit = !$evenBit;
+  }
+
+  return $hash;
 }
 
 // In submit.php, before inserting new issue:

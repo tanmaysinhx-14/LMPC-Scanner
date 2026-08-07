@@ -8,24 +8,35 @@
 
 <?php // Backend for Citizen Registration
   if(isset($_POST['registerCitizen'])) {
-    $name = sanitizeInput($_POST['fullName']);
-    $email = sanitizeInput($_POST['email']);
-    $phone = sanitizeInput($_POST['phone']);
-    $city = sanitizeInput($_POST['city']);
+    requireCsrfToken();
+    $name = sanitizeInput($_POST['fullName'] ?? '');
+    $email = strtolower(trim((string) ($_POST['email'] ?? '')));
+    $phone = sanitizeInput($_POST['phone'] ?? '');
+    $city = sanitizeInput($_POST['city'] ?? '');
     $ward_id = !empty($_POST['ward_id']) ? (int)$_POST['ward_id'] : null;
-    $password = sanitizeInput($_POST['password']);
-    $confirmPassword = sanitizeInput($_POST['confirmPassword']);
-    $role = sanitizeInput($_POST['userRole']);
+    $password = (string) ($_POST['password'] ?? '');
+    $confirmPassword = (string) ($_POST['confirmPassword'] ?? '');
+    $requestedRole = strtolower(trim((string) ($_POST['userRole'] ?? '')));
+    $role = 'citizen';
     $termsAccepted = isset($_POST['termsAccepted']);
 
     if (!$termsAccepted) {
       setToast('Agree to Terms and Conditions.', 'danger');
     }
+    elseif (!($db instanceof PDO)) {
+      setToast('The service is temporarily unavailable. Please try again later.', 'danger');
+    }
+    elseif ($name === '' || !validateEmail($email) || !validatePassword($password)) {
+      setToast('Enter a valid name, email, and strong password.', 'danger');
+    }
+    elseif ($requestedRole !== 'citizen') {
+      setToast('Only citizen accounts can be created from this form.', 'danger');
+    }
     elseif ($password !== $confirmPassword) {
       setToast('Passwords entered do not match.', 'danger');
     } 
     else {
-      $password_hash = password_hash($password, PASSWORD_BCRYPT);
+      $password_hash = password_hash($password, PASSWORD_DEFAULT);
 
       try {
         $stmt = $db->prepare("SELECT id FROM users WHERE email = :email");
@@ -50,14 +61,14 @@
         }
       } 
       catch (PDOException $e) {
-        setToast('Database error occurred. Error: ' . $e->getMessage(), 'danger');
+        setToast('Database error occurred. Please try again later.', 'danger');
       }
     }
   }
 ?>
 
 <?php // Header (contains Unified Page Meta-Data and CSS imports)
-  require_once '../../components/header.php';
+  require_once __DIR__ . '/../../components/header.php';
 ?>
 
 <body class="d-flex flex-column min-vh-100">
@@ -122,10 +133,9 @@
                       type="text" 
                       class="form-control" 
                       placeholder="Enter your full name" 
-                      value="First Citizen"
                       required 
                       autocomplete="name" 
-                      value="<?php echo isset($_POST['fullName']) ? htmlspecialchars($_POST['fullName']) : ''; ?>"
+                      value="<?php echo htmlspecialchars($_POST['fullName'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                     />
                   </div>
                   <div class="form-text">Your full name as it appears on official documents</div>
@@ -140,16 +150,15 @@
                     <span class="input-group-text bg-body-tertiary">
                       <i class="fas fa-envelope text-secondary"></i>
                     </span>
-                    <input 1
+                    <input
                       id="registerEmail" 
                       name="email" 
                       type="email" 
                       class="form-control" 
                       placeholder="Enter your email address" 
-                      value="mail.citizen@gmail.com"
                       required 
                       autocomplete="email" 
-                      value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>"
+                      value="<?php echo htmlspecialchars($_POST['email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                     />
                   </div>
                   <div class="form-text">We'll send a verification email to this address</div>
@@ -170,10 +179,9 @@
                       type="tel" 
                       class="form-control" 
                       placeholder="Enter your phone number" 
-                      value="+91987654321"
                       required 
                       autocomplete="tel" 
-                      value="<?php echo isset($_POST['phone']) ? htmlspecialchars($_POST['phone']) : ''; ?>"
+                      value="<?php echo htmlspecialchars($_POST['phone'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                     />
                   </div>
                   <div class="form-text">We'll use this for important updates</div>
@@ -192,7 +200,6 @@
                       type="password" 
                       class="form-control" 
                       placeholder="Create a strong password" 
-                      value="Citizen@123"
                       required 
                       minlength="8" 
                       autocomplete="new-password"
@@ -219,7 +226,6 @@
                       type="password" 
                       class="form-control" 
                       placeholder="Confirm your password" 
-                      value="Citizen@123"
                       required 
                       autocomplete="new-password"
                     />
@@ -237,11 +243,9 @@
                     <select id="userRole" name="userRole" class="form-select" required>
                       <option value="">Select your role...</option>
                       <option value="citizen" <?php echo (isset($_POST['userRole']) && $_POST['userRole'] === 'citizen') ? 'selected' : ''; ?>>Citizen</option>
-                      <option value="authority" <?php echo (isset($_POST['userRole']) && $_POST['userRole'] === 'authority') ? 'selected' : ''; ?>>Municipal Authority</option>
-                      <option value="admin" <?php echo (isset($_POST['userRole']) && $_POST['userRole'] === 'admin') ? 'selected' : ''; ?>>Administrator</option>
                     </select>
                   </div>
-                  <div class="form-text">Select the role that best describes you</div>
+                  <div class="form-text">Staff accounts are created by an administrator.</div>
                 </div>
 
                 <!-- City -->
@@ -276,7 +280,6 @@
                       name="termsAccepted" 
                       class="form-check-input" 
                       type="checkbox" 
-                      checked 
                       required
                     />
                     <label for="termsCheckbox" class="form-check-label text-secondary">
@@ -284,6 +287,8 @@
                     </label>
                   </div>
                 </div>
+
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrfToken(), ENT_QUOTES, 'UTF-8'); ?>">
 
                 <!-- Submit -->
                 <button type="submit" name="registerCitizen" class="btn btn-primary w-100 py-2 mb-3 fw-medium">
@@ -309,8 +314,8 @@
   </main>
 
   <?php // Contains Bottom-Credits and JS imports
-    require_once '../../components/bottom-credits.php';
-    require_once '../../components/footer.php';
+    require_once __DIR__ . '/../../components/bottom-credits.php';
+    require_once __DIR__ . '/../../components/footer.php';
   ?>
 
   <script type="text/javascript" src="../../assets/js/index.js"></script>

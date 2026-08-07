@@ -1,1 +1,22 @@
-// Retrieve data of a single issue
+<?php
+declare(strict_types=1);
+require __DIR__ . '/../../bootstrap.php';
+$bootstrapData = bootstrapAccounts();
+extract($bootstrapData);
+header('Content-Type: application/json; charset=utf-8');
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') jsonResponse(405, 'GET is required.');
+if (!($db instanceof PDO)) jsonResponse(503, 'The database is temporarily unavailable.');
+$issueId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+if ($issueId === false) jsonResponse(422, 'A valid issue id is required.');
+$stmt = $db->prepare('SELECT i.*, u.name AS reporter_name, (SELECT COUNT(*) FROM issue_reports ir WHERE ir.issue_id = i.id) AS report_count FROM issues i LEFT JOIN users u ON u.id = i.user_id WHERE i.id = ? LIMIT 1');
+$stmt->execute([(int) $issueId]);
+$issue = $stmt->fetch(PDO::FETCH_ASSOC);
+if (!$issue) jsonResponse(404, 'Issue not found.');
+$images = $db->prepare('SELECT id, file_path, original_name, mime_type, file_size, created_at FROM issue_images WHERE issue_id = ? ORDER BY created_at ASC, id ASC');
+$images->execute([(int) $issueId]);
+$issue['images'] = array_map(static function (array $image): array { $image['url'] = '/' . ltrim((string) $image['file_path'], '/'); return $image; }, $images->fetchAll(PDO::FETCH_ASSOC));
+$history = $db->prepare('SELECT sh.old_status, sh.new_status, sh.note, sh.created_at, u.name AS changed_by_name FROM status_history sh LEFT JOIN users u ON u.id = sh.changed_by WHERE sh.issue_id = ? ORDER BY sh.created_at ASC, sh.id ASC');
+$history->execute([(int) $issueId]);
+$issue['status_history'] = $history->fetchAll(PDO::FETCH_ASSOC);
+$issue['report_count'] = (int) $issue['report_count'];
+jsonResponse(200, 'Issue loaded.', ['issue' => $issue]);

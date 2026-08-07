@@ -12,27 +12,34 @@
   require_once __DIR__ . '/functions/utility/utility.php';
 
   require_once __DIR__ . '/functions/validations/validations.php';
-?>
 
-<?php 
   function bootstrapAccounts(array $options = []): array {
     $db = connectDatabase();
 
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-      session_start();
+    startAppSession();
+    if ($db instanceof PDO) {
+      restoreRememberedLogin($db);
+      refreshSessionUser($db);
     }
 
     $requiredRoles = $options['required_roles'] ?? [];
 
     $requiresLogin = ($options['require_login'] ?? false) || $requiredRoles !== [];
 
-    if ($requiresLogin && (($_SESSION['logged_in'] ?? false) !== true)) {
+    if ($requiresLogin && !isLoggedIn()) {
       setToast(message: 'You are not logged in. Please log in to access this page.', type: 'danger');
       redirect('../login/', 0);
+      exit;
+    }
+
+    if ($requiredRoles !== [] && isLoggedIn()
+      && !in_array((string) ($_SESSION['user_role'] ?? ''), $requiredRoles, true)) {
+      setToast(message: 'You do not have permission to access this page.', type: 'danger');
+      redirect('../login/', 0);
+      exit;
     }
 
     return [
       'db' => $db
     ];
   }
-?>
