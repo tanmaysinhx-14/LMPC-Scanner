@@ -15,14 +15,15 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 if ($db instanceof PDO) {
   try {
     $workers = $db->query(
-      "SELECT id, name, email, city
-         FROM users
-        WHERE role = 'worker' AND is_active = 1
-        ORDER BY name ASC"
+      "SELECT u.id, u.name, u.email, u.city, u.department,
+              (SELECT COUNT(*) FROM assignments a WHERE a.worker_id = u.id AND a.completed_at IS NULL) AS active_assignments
+         FROM users u
+        WHERE u.role = 'worker' AND u.is_active = 1
+        ORDER BY u.name ASC"
     )->fetchAll(PDO::FETCH_ASSOC);
 
     $availableIssues = $db->query(
-      "SELECT i.id, i.title, i.category, i.status, i.address, i.severity, i.priority_score, i.created_at,
+      "SELECT i.id, i.title, i.category, i.department, i.status, i.address, i.severity, i.priority_score, i.created_at,
               COUNT(ir.id) AS report_count
          FROM issues i
          LEFT JOIN issue_reports ir ON ir.issue_id = i.id
@@ -30,7 +31,7 @@ if ($db instanceof PDO) {
            ON active_assignment.issue_id = i.id AND active_assignment.completed_at IS NULL
         WHERE i.status IN ('pending', 'acknowledged', 'in_progress')
           AND active_assignment.id IS NULL
-        GROUP BY i.id, i.title, i.category, i.status, i.address, i.severity, i.priority_score, i.created_at
+        GROUP BY i.id, i.title, i.category, i.department, i.status, i.address, i.severity, i.priority_score, i.created_at
         ORDER BY i.priority_score DESC, i.created_at DESC
         LIMIT 100"
     )->fetchAll(PDO::FETCH_ASSOC);
@@ -88,6 +89,7 @@ if ($db instanceof PDO) {
       <nav class="nav flex-column gap-1">
         <a class="nav-link" href="admin-dashboard.php"><i class="fas fa-chart-pie fa-fw"></i><span>Dashboard</span></a>
         <a class="nav-link active" href="work-management.php"><i class="fas fa-briefcase fa-fw"></i><span>Work management</span></a>
+        <a class="nav-link" href="analytics.php"><i class="fas fa-chart-line fa-fw"></i><span>Analytics</span></a>
         <a class="nav-link" href="../citizen/public-feed.php"><i class="fas fa-layer-group fa-fw"></i><span>Community feed</span></a>
         <a class="nav-link" href="../heatmap/"><i class="fas fa-map-location-dot fa-fw"></i><span>City pulse</span></a>
         <a class="nav-link" href="../register/index.php"><i class="fas fa-user-plus fa-fw"></i><span>Create account</span></a>
@@ -108,8 +110,8 @@ if ($db instanceof PDO) {
             <section class="work-card mb-4"><div class="work-card-header"><div><span class="eyebrow">Direct assignment</span><h2>Allocate an issue</h2></div><span class="count-badge"><?= count($availableIssues) ?> available</span></div><div class="work-card-body">
               <?php if ($workers === []): ?><div class="alert alert-warning small mb-0"><i class="fas fa-user-hard-hat me-1"></i>Create a worker account before assigning field work.</div><?php elseif ($availableIssues === []): ?><div class="empty-copy"><i class="fas fa-circle-check"></i>Every active issue currently has an owner.</div><?php else: ?>
                 <form id="assignForm" class="row g-3">
-                  <div class="col-12"><label class="form-label small fw-semibold" for="assignIssue">Issue</label><select class="form-select" id="assignIssue" required><option value="">Select an unassigned issue</option><?php foreach ($availableIssues as $issue): ?><option value="<?= (int) $issue['id'] ?>"><?= $e($issue['title'] ?: issueCategoryLabel($issue['category'])) ?> · <?= (int) $issue['report_count'] ?> reports · <?= $e($issue['address'] ?: 'Location recorded') ?></option><?php endforeach; ?></select></div>
-                  <div class="col-12 col-md-6"><label class="form-label small fw-semibold" for="assignWorker">Worker</label><select class="form-select" id="assignWorker" required><option value="">Select worker</option><?php foreach ($workers as $worker): ?><option value="<?= (int) $worker['id'] ?>"><?= $e($worker['name']) ?> · <?= $e($worker['city'] ?: 'Field team') ?></option><?php endforeach; ?></select></div>
+                  <div class="col-12"><label class="form-label small fw-semibold" for="assignIssue">Issue</label><select class="form-select" id="assignIssue" required><option value="">Select an unassigned issue</option><?php foreach ($availableIssues as $issue): ?><option value="<?= (int) $issue['id'] ?>" data-department="<?= $e($issue['department'] ?: departmentForCategory($issue['category'])) ?>"><?= $e($issue['title'] ?: issueCategoryLabel($issue['category'])) ?> · <?= (int) $issue['report_count'] ?> reports · <?= $e($issue['department'] ?: departmentForCategory($issue['category'])) ?> · <?= $e($issue['address'] ?: 'Location recorded') ?></option><?php endforeach; ?></select></div>
+                  <div class="col-12 col-md-6"><label class="form-label small fw-semibold" for="assignWorker">Worker</label><select class="form-select" id="assignWorker" required><option value="">Select worker</option><?php foreach ($workers as $worker): ?><option value="<?= (int) $worker['id'] ?>" data-department="<?= $e($worker['department'] ?: 'municipal') ?>"><?= $e($worker['name']) ?> · <?= $e($worker['department'] ?: 'municipal') ?> · <?= (int) $worker['active_assignments'] ?> active</option><?php endforeach; ?></select><div class="form-text">Workers are filtered to the issue department; municipal workers remain available as generalists.</div></div>
                   <div class="col-12 col-md-6"><label class="form-label small fw-semibold" for="assignNotes">Instruction <span class="text-muted fw-normal">(optional)</span></label><input class="form-control" id="assignNotes" maxlength="2000" placeholder="What should the worker check?"></div>
                   <div class="col-12 d-flex justify-content-end"><button class="btn btn-primary" type="submit"><i class="fas fa-share-from-square me-1"></i>Assign work</button></div>
                 </form>
@@ -132,6 +134,19 @@ if ($db instanceof PDO) {
   </div>
   <script>
     const adminWorkCsrfToken = <?= json_encode(csrfToken(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const assignIssueSelect = document.getElementById('assignIssue');
+    const assignWorkerSelect = document.getElementById('assignWorker');
+    function filterWorkersByDepartment() {
+      const department = assignIssueSelect?.selectedOptions[0]?.dataset.department || '';
+      Array.from(assignWorkerSelect?.options || []).forEach(option => {
+        if (!option.value) return;
+        const workerDepartment = option.dataset.department || 'municipal';
+        option.hidden = Boolean(department && workerDepartment !== department && workerDepartment !== 'municipal');
+      });
+      if (assignWorkerSelect?.selectedOptions[0]?.hidden) assignWorkerSelect.value = '';
+    }
+    assignIssueSelect?.addEventListener('change', filterWorkersByDepartment);
+    filterWorkersByDepartment();
     async function postWork(url, payload) {
       const response = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': adminWorkCsrfToken}, body: JSON.stringify(payload)});
       const result = await response.json().catch(() => ({}));

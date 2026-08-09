@@ -1,4 +1,9 @@
-"""Warm YOLO inference and civic-issue severity computation."""
+"""Legacy ONNX detection helper.
+
+The deployed FastAPI path is ``main.py`` and uses the trained YOLOv8
+classification model. This module is retained for offline experiments and
+must not be treated as a second production inference contract.
+"""
 
 from __future__ import annotations
 

@@ -44,10 +44,31 @@ function encodeGeohash(float $lat, float $lng, int $precision = 7): string
   return $hash;
 }
 
+function geohashPrecisionForCategory(?string $category): int
+{
+  $category = strtolower(trim((string) $category));
+  $defaults = [
+    'pothole' => 7, 'road_damage' => 7, 'streetlight' => 7, 'fallen_tree' => 7,
+    'waterlogging' => 6, 'open_drain' => 6, 'garbage' => 7, 'encroachment' => 7,
+    'graffiti' => 7, 'other' => 7,
+  ];
+  $envKey = 'CIVIC_GEOHASH_PRECISION_' . strtoupper(str_replace('-', '_', $category));
+  $configured = getenv($envKey);
+  if ($configured !== false && ctype_digit((string) $configured)) {
+    return max(5, min(8, (int) $configured));
+  }
+  return $defaults[$category] ?? 7;
+}
+
+function issueGeohash(float $lat, float $lng, ?string $category): string
+{
+  return encodeGeohash($lat, $lng, geohashPrecisionForCategory($category));
+}
+
 // In submit.php, before inserting new issue:
 function detectAndHandleDuplicate(PDO $db, float $lat, float $lng, string $category, int $userId): ?int
 {
-  $geohash = encodeGeohash($lat, $lng, 7);
+  $geohash = issueGeohash($lat, $lng, $category);
   $prefixes = [
     substr($geohash, 0, 7),  // exact cell
     substr($geohash, 0, 6),  // parent cell (±600m)
@@ -63,7 +84,7 @@ function detectAndHandleDuplicate(PDO $db, float $lat, float $lng, string $categ
           AND user_id != ?
         LIMIT 1
     ");
-  $stmt->execute([substr($geohash, 0, 6) . '%', $category, $userId]);
+  $stmt->execute([substr($geohash, 0, geohashPrecisionForCategory($category)) . '%', $category, $userId]);
   $existing = $stmt->fetch(PDO::FETCH_ASSOC);
 
   if ($existing) {

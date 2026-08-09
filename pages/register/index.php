@@ -30,6 +30,7 @@
     $password = (string) ($_POST['password'] ?? '');
     $confirmPassword = (string) ($_POST['confirmPassword'] ?? '');
     $requestedRole = strtolower(trim((string) ($_POST['userRole'] ?? '')));
+    $department = $requestedRole === 'worker' ? normalizedDepartment($_POST['department'] ?? null) : null;
     $staffCode = trim((string) ($_POST['staffCode'] ?? ''));
     $role = $requestedRole;
     $termsAccepted = isset($_POST['termsAccepted']);
@@ -70,12 +71,13 @@
           setToast('Account exists with this email.', 'danger');
         } 
         else {
-          $insertStmt = $db->prepare("INSERT INTO users (name, email, password_hash, role, ward_id, city, phone) VALUES (:name, :email, :password_hash, :role, :ward_id, :city, :phone)");
+          $insertStmt = $db->prepare("INSERT INTO users (name, email, password_hash, role, department, ward_id, city, phone) VALUES (:name, :email, :password_hash, :role, :department, :ward_id, :city, :phone)");
           $insertStmt->execute([
             'name' => $name,
             'email' => $email,
             'password_hash' => $password_hash,
             'role' => $role,
+            'department' => $department,
             'ward_id' => $ward_id,
             'city' => $city,
             'phone' => $phone
@@ -151,7 +153,7 @@
                       placeholder="Enter your full name" 
                       required 
                       autocomplete="name" 
-                      value="<?php echo htmlspecialchars($_POST['fullName'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                      value="<?php echo htmlspecialchars($_POST['fullName'] ?? 'First Citizen', ENT_QUOTES, 'UTF-8'); ?>"
                     />
                   </div>
                   <div class="form-text">Your full name as it appears on official documents</div>
@@ -172,9 +174,9 @@
                       type="email" 
                       class="form-control" 
                       placeholder="Enter your email address" 
-                      required 
-                      autocomplete="email" 
-                      value="<?php echo htmlspecialchars($_POST['email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                      required
+                      autocomplete="email"
+                      value="<?php echo htmlspecialchars($_POST['email'] ?? 'mail.citizen@gmail.com', ENT_QUOTES, 'UTF-8'); ?>"
                     />
                   </div>
                   <div class="form-text">We'll send a verification email to this address</div>
@@ -197,7 +199,7 @@
                       placeholder="Enter your phone number" 
                       required 
                       autocomplete="tel" 
-                      value="<?php echo htmlspecialchars($_POST['phone'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                      value="<?php echo htmlspecialchars($_POST['phone'] ?? '+919876543210', ENT_QUOTES, 'UTF-8'); ?>"
                     />
                   </div>
                   <div class="form-text">We'll use this for important updates</div>
@@ -216,6 +218,7 @@
                       type="password" 
                       class="form-control" 
                       placeholder="Create a strong password" 
+                      value="Citizen@123"
                       required 
                       minlength="8" 
                       autocomplete="new-password"
@@ -242,6 +245,7 @@
                       type="password" 
                       class="form-control" 
                       placeholder="Confirm your password" 
+                      value="Citizen@123"
                       required 
                       autocomplete="new-password"
                     />
@@ -264,6 +268,22 @@
                     </select>
                   </div>
                   <div class="form-text">Citizens report issues. Workers resolve assigned issues. Admins coordinate city operations.</div>
+                </div>
+
+                <!-- Worker department -->
+                <div class="mb-3 d-none" id="workerDepartmentGroup">
+                  <label for="workerDepartment" class="form-label fw-medium">Worker department</label>
+                  <div class="input-group">
+                    <span class="input-group-text bg-body-tertiary"><i class="fas fa-sitemap text-secondary"></i></span>
+                    <select id="workerDepartment" name="department" class="form-select">
+                      <option value="municipal">Municipal services</option>
+                      <option value="sanitation">Sanitation</option>
+                      <option value="drainage">Drainage</option>
+                      <option value="public_works">Public works</option>
+                      <option value="electricity">Electricity</option>
+                    </select>
+                  </div>
+                  <div class="form-text">Admins will see workers matched to an issue's AI-routed department.</div>
                 </div>
 
                 <!-- Staff registration key -->
@@ -395,10 +415,13 @@
     document.addEventListener('DOMContentLoaded', function() {
       const roleSelect = document.getElementById('userRole');
       const staffCodeGroup = document.getElementById('staffCodeGroup');
+      const workerDepartmentGroup = document.getElementById('workerDepartmentGroup');
       const staffCode = document.getElementById('staffCode');
       const syncStaffFields = () => {
         const staffRole = roleSelect && ['worker', 'admin'].includes(roleSelect.value);
+        const workerRole = roleSelect && roleSelect.value === 'worker';
         staffCodeGroup?.classList.toggle('d-none', !staffRole);
+        workerDepartmentGroup?.classList.toggle('d-none', !workerRole);
         if (staffCode) staffCode.required = false;
       };
       roleSelect?.addEventListener('change', syncStaffFields);

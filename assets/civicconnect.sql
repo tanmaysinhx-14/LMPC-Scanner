@@ -34,7 +34,10 @@ CREATE TABLE `assignments` (
   `assigned_by` int(11) DEFAULT NULL,
   `notes` text DEFAULT NULL,
   `assigned_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `completed_at` timestamp NULL DEFAULT NULL
+  `completed_at` timestamp NULL DEFAULT NULL,
+  `citizen_verified_at` timestamp NULL DEFAULT NULL,
+  `citizen_reopen_reason` text DEFAULT NULL,
+  `after_image_path` varchar(500) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -94,6 +97,7 @@ CREATE TABLE `issues` (
   `title` varchar(255) DEFAULT NULL,
   `description` text DEFAULT NULL,
   `category` enum('pothole','garbage','streetlight','waterlogging','road_damage','encroachment','graffiti','open_drain','fallen_tree','unknown','other') NOT NULL,
+  `department` varchar(50) NOT NULL DEFAULT 'municipal',
   `severity` tinyint(4) NOT NULL DEFAULT 1 CHECK (`severity` between 1 and 5),
   `status` enum('pending','acknowledged','in_progress','resolved','rejected') DEFAULT 'pending',
   `lat` decimal(10,8) NOT NULL,
@@ -107,6 +111,8 @@ CREATE TABLE `issues` (
   `is_manipulated` tinyint(1) DEFAULT 0,
   `priority_score` decimal(10,4) DEFAULT 0.0000,
   `parent_issue_id` int(11) DEFAULT NULL,
+  `is_recurring` tinyint(1) NOT NULL DEFAULT 0,
+  `recurrence_of` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `resolved_at` timestamp NULL DEFAULT NULL
@@ -228,6 +234,7 @@ CREATE TABLE `users` (
   `email` varchar(255) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
   `role` enum('citizen','worker','admin') NOT NULL DEFAULT 'citizen',
+  `department` varchar(50) DEFAULT NULL,
   `ward_id` int(11) DEFAULT NULL,
   `city` varchar(100) DEFAULT NULL,
   `phone` varchar(15) DEFAULT NULL,
@@ -239,8 +246,14 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `ward_id`, `city`, `phone`, `is_active`, `created_at`) VALUES
-(1, 'First Citizen', 'mail.citizen@gmail.com', '$2y$10$3qmeDWBdQLKEpvombYJ4UudZXLjuTKO8ZrD2wdWIQV2So/pA.3cjO', 'citizen', NULL, 'Chennai', '+91987654321', 1, '2026-08-06 17:07:39');
+-- Prototype demo accounts:
+-- Citizen: mail.citizen@gmail.com / Citizen@123
+-- Worker:  mail.worker@gmail.com  / Worker@123
+-- Admin:   mail.admin@gmail.com   / Admin@123
+INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `department`, `ward_id`, `city`, `phone`, `is_active`, `created_at`) VALUES
+(1, 'First Citizen', 'mail.citizen@gmail.com', '$2y$12$KjFZiZrb7bOAmyv6g1ifH.9WWfkXUx569OtjdEf4e/Kjz4rT2qDwS', 'citizen', NULL, NULL, 'Chennai', '+91987654321', 1, '2026-08-06 17:07:39'),
+(2, 'First Worker', 'mail.worker@gmail.com', '$2y$12$bMt.UrnA7XwiSCILkuFsn.1HI6XdWQ2a0qk.zV.ijtIeZD4lf5U/m', 'worker', 'public_works', NULL, 'Chennai', '+91987654322', 1, '2026-08-08 09:00:00'),
+(3, 'First Admin', 'mail.admin@gmail.com', '$2y$12$MEeU9WBZ7na3NcKFvnwppufqRGng1CWbYCN0R/nO4BSVyUGrvhhd6', 'admin', NULL, NULL, 'Chennai', '+91987654323', 1, '2026-08-08 09:00:00');
 
 --
 -- Demo civic data for the database-backed City Pulse heatmap.
@@ -310,7 +323,8 @@ SELECT cluster.base_report_id + report_numbers.report_number - 1,
 ALTER TABLE `assignments`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_assignments_issue_active` (`issue_id`,`completed_at`),
-  ADD KEY `idx_assignments_worker_active` (`worker_id`,`completed_at`);
+  ADD KEY `idx_assignments_worker_active` (`worker_id`,`completed_at`),
+  ADD KEY `idx_assignments_citizen_verified` (`citizen_verified_at`);
 
 --
 -- Indexes for table `work_requests`
@@ -343,9 +357,11 @@ ALTER TABLE `issues`
   ADD KEY `idx_geohash` (`geohash`),
   ADD KEY `idx_status` (`status`),
   ADD KEY `idx_category` (`category`),
+  ADD KEY `idx_department` (`department`),
   ADD KEY `idx_severity` (`severity`),
   ADD KEY `idx_created` (`created_at`),
-  ADD KEY `idx_priority` (`priority_score`);
+  ADD KEY `idx_priority` (`priority_score`),
+  ADD KEY `idx_recurrence` (`is_recurring`,`recurrence_of`);
 
 --
 -- Indexes for table `issue_ai_analyses`
@@ -401,7 +417,8 @@ ALTER TABLE `upvotes`
 --
 ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `email` (`email`);
+  ADD UNIQUE KEY `email` (`email`),
+  ADD KEY `idx_users_department_role` (`department`,`role`,`is_active`);
 
 --
 -- AUTO_INCREMENT for dumped tables
@@ -471,7 +488,7 @@ ALTER TABLE `upvotes`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

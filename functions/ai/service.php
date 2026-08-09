@@ -20,10 +20,18 @@ class AIServiceException extends RuntimeException
 {
 }
 
-function callAIService(string $relativePath): array
+function callAIService(string $relativePath, ?string $submittedCategory = null, ?float $latitude = null, ?float $longitude = null): array
 {
   $endpoint = 'http://127.0.0.1:8000/analyze';
-  $payload = json_encode(['filepath' => $relativePath], JSON_UNESCAPED_SLASHES);
+  $payloadData = ['filepath' => $relativePath];
+  if ($submittedCategory !== null && $submittedCategory !== '') {
+    $payloadData['submitted_category'] = normalizedCategory($submittedCategory);
+  }
+  if ($latitude !== null && $longitude !== null) {
+    $payloadData['latitude'] = $latitude;
+    $payloadData['longitude'] = $longitude;
+  }
+  $payload = json_encode($payloadData, JSON_UNESCAPED_SLASHES);
   if ($payload === false) {
     throw new AIServiceException('AI analysis request could not be prepared.');
   }
@@ -82,16 +90,17 @@ function callAIService(string $relativePath): array
   }
 
   $detectedCategory = normalizedCategory($decoded['category']);
-  if ($detectedCategory === 'unknown') {
-    throw new AIServiceException('AI analysis returned an unsupported category.');
-  }
+  $department = normalizedDepartment($decoded['department'] ?? departmentForCategory($detectedCategory));
 
   return [
     'category' => $detectedCategory,
     'severity' => max(1, min(5, (int) $decoded['severity'])),
     'confidence' => max(0.0, min(1.0, (float) $decoded['confidence'])),
     'is_manipulated' => !empty($decoded['is_manipulated']),
-    'model_version' => 'civicconnect-ai-service',
+    'department' => $department,
+    'low_confidence' => !empty($decoded['low_confidence']) || (float) $decoded['confidence'] < 0.45,
+    'manipulation' => is_array($decoded['manipulation'] ?? null) ? $decoded['manipulation'] : [],
+    'model_version' => (string) ($decoded['model_version'] ?? 'civicconnect-ai-service'),
     'raw' => $decoded,
   ];
 }

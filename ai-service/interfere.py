@@ -1,4 +1,8 @@
-# YOLOv8n and Severity Logic
+"""Archived ONNX experiment; production inference lives in ``main.py``.
+
+This file is retained only for historical/offline comparison and is not
+imported by the FastAPI service.
+"""
 import onnxruntime as ort
 import numpy as np
 from PIL import Image

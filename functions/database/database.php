@@ -16,7 +16,7 @@
       ]);
       return $pdo;
     } 
-    catch (PDOException $e) {
+    catch (PDOException) {
       return null;
     }
   }

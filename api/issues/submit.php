@@ -70,21 +70,24 @@ $gpsAccuracy = $gpsAccuracy === false ? null : max(0.0, min(10000.0, (float) $gp
 
 try {
   $image = storeUploadedIssueImage($_FILES['issueImage'] ?? $_FILES['image'] ?? []);
-  $ai = callAIService($image['relative_path']);
-  $category = $ai['category'] === 'unknown' ? $submittedCategory : $ai['category'];
+  $ai = callAIService($image['relative_path'], $submittedCategory, (float) $latitude, (float) $longitude);
+  $category = (($ai['category'] ?? 'unknown') === 'unknown' || !empty($ai['low_confidence'])) ? $submittedCategory : $ai['category'];
+  $department = (($ai['category'] ?? 'unknown') === 'unknown' || !empty($ai['low_confidence']))
+    ? departmentForCategory($category)
+    : normalizedDepartment($ai['department'] ?? departmentForCategory($category));
   $severity = (int) $ai['severity'];
-  $geohash = encodeGeohash((float) $latitude, (float) $longitude, 7);
+  $geohash = issueGeohash((float) $latitude, (float) $longitude, $category);
   $rawAI = json_encode($ai['raw'] ?? $ai, JSON_UNESCAPED_SLASHES);
 
   $db->beginTransaction();
   $duplicate = $db->prepare(
-    "SELECT id FROM issues
+    "SELECT id, upvote_count, severity, department FROM issues
       WHERE geohash LIKE :geohash_prefix AND category = :category
         AND status NOT IN ('resolved', 'rejected')
         AND created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
       ORDER BY created_at ASC LIMIT 1 FOR UPDATE"
   );
-  $duplicate->execute(['geohash_prefix' => substr($geohash, 0, 6) . '%', 'category' => $category]);
+  $duplicate->execute(['geohash_prefix' => substr($geohash, 0, geohashPrecisionForCategory($category)) . '%', 'category' => $category]);
   $existing = $duplicate->fetch(PDO::FETCH_ASSOC);
 
   if ($existing) {
@@ -106,25 +109,40 @@ try {
         (issue_id, report_id, image_id, category, severity, confidence, is_manipulated, model_version, raw_output, analyzed_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
     )->execute([$issueId, $reportId, $imageId, $category, $severity, $ai['confidence'], (int) $ai['is_manipulated'], $ai['model_version'], $rawAI]);
+    $reportCountStmt = $db->prepare('SELECT COUNT(*) FROM issue_reports WHERE issue_id = ?');
+    $reportCountStmt->execute([$issueId]);
+    $reportCount = (int) $reportCountStmt->fetchColumn();
+    $newSeverity = max((int) $existing['severity'], $severity);
+    $newUpvotes = (int) $existing['upvote_count'] + 1;
+    $priority = calculatePriorityScore($newSeverity, $reportCount, $newUpvotes, null, false);
     $db->prepare(
-      'UPDATE issues SET upvote_count = upvote_count + 1,
-          severity = GREATEST(severity, ?), priority_score = (GREATEST(severity, ?) * 20) + upvote_count
+      'UPDATE issues SET upvote_count = ?, severity = ?, department = ?, priority_score = ?, updated_at = NOW()
        WHERE id = ?'
-    )->execute([$severity, $severity, $issueId]);
+    )->execute([$newUpvotes, $newSeverity, $department, $priority, $issueId]);
     $db->commit();
     $message = 'Your report was grouped with an existing nearby issue.';
     setToast($message, 'success');
     jsonResponse(201, $message, ['issue_id' => $issueId, 'grouped' => true, 'category' => $category, 'ai' => $ai]);
   }
 
+  $recurrenceStmt = $db->prepare(
+    "SELECT id FROM issues
+      WHERE category = ? AND geohash LIKE ? AND status = 'resolved'
+        AND resolved_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      ORDER BY resolved_at DESC, id DESC LIMIT 1"
+  );
+  $recurrenceStmt->execute([$category, substr($geohash, 0, geohashPrecisionForCategory($category)) . '%']);
+  $recurrenceOf = $recurrenceStmt->fetchColumn();
+  $isRecurring = $recurrenceOf !== false;
+  $priority = calculatePriorityScore($severity, 1, 0, null, $isRecurring);
   $title = ucfirst(str_replace('_', ' ', $category)) . ' reported nearby';
   $insertIssue = $db->prepare(
     'INSERT INTO issues
-      (user_id, title, description, category, severity, status, lat, lng, geohash, address, ward_id,
-       upvote_count, is_verified, ai_confidence, is_manipulated, priority_score, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, NOW(), NOW())'
+      (user_id, title, description, category, department, severity, status, lat, lng, geohash, address, ward_id,
+       upvote_count, is_verified, ai_confidence, is_manipulated, priority_score, is_recurring, recurrence_of, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NOW(), NOW())'
   );
-  $insertIssue->execute([$user['id'], $title, $description, $category, $severity, 'pending', $latitude, $longitude, $geohash, $address, $user['ward_id'], $ai['confidence'], (int) $ai['is_manipulated'], ($severity * 20) + ($ai['confidence'] * 10)]);
+  $insertIssue->execute([$user['id'], $title, $description, $category, $department, $severity, 'pending', $latitude, $longitude, $geohash, $address, $user['ward_id'], $ai['confidence'], (int) $ai['is_manipulated'], $priority, (int) $isRecurring, $recurrenceOf !== false ? (int) $recurrenceOf : null]);
   $issueId = (int) $db->lastInsertId();
   $db->prepare(
     'INSERT INTO issue_reports

@@ -52,6 +52,7 @@ $formatDate = static fn (?string $date): string => $date ? date('M d, Y · H:i',
         <a class="nav-link" href="../citizen/public-feed.php"><i class="fas fa-layer-group fa-fw"></i><span>Community feed</span></a>
         <a class="nav-link" href="../heatmap/"><i class="fas fa-map-location-dot fa-fw"></i><span>City pulse</span></a>
         <a class="nav-link" href="work-management.php"><i class="fas fa-briefcase fa-fw"></i><span>Work management</span><span class="nav-count"><?= $assignmentCount ?></span></a>
+        <a class="nav-link" href="analytics.php"><i class="fas fa-chart-line fa-fw"></i><span>Analytics</span></a>
         <a class="nav-link" href="../citizen/public-feed.php?sort=new"><i class="fas fa-bolt fa-fw"></i><span>Latest issues</span><span class="nav-count"><?= (int) ($stats['reported'] ?? 0) ?></span></a>
         <a class="nav-link" href="../account/profile.php"><i class="fas fa-user fa-fw"></i><span>Profile</span></a>
       </nav>
@@ -83,6 +84,7 @@ $formatDate = static fn (?string $date): string => $date ? date('M d, Y · H:i',
         </div>
 
         <section class="data-card"><div class="data-card-header"><div><span class="eyebrow">Governance signal</span><h2>What this data means</h2></div></div><div class="row g-3"><div class="col-12 col-md-4"><div class="insight-card"><i class="fas fa-map-location-dot"></i><strong>Density is geographic</strong><p>Use the public heatmap to spot clusters instead of counting duplicate citizen reports as separate incidents.</p></div></div><div class="col-12 col-md-4"><div class="insight-card"><i class="fas fa-robot"></i><strong>AI stays observable</strong><p>Every stored analysis contributes to the count and confidence signal shown above for later review.</p></div></div><div class="col-12 col-md-4"><div class="insight-card"><i class="fas fa-arrows-rotate"></i><strong>Status changes are audited</strong><p>Updates are written to status history so the public and staff can trace the lifecycle of an issue.</p></div></div></div></section>
+        <section class="data-card mt-4"><div class="data-card-header"><div><span class="eyebrow">Priority transparency</span><h2>How the queue is scored</h2></div><a class="btn btn-sm btn-outline-primary" href="analytics.php">Open analytics</a></div><p class="small text-muted mb-0"><code>(severity x 2) + ln(report_count + 1) + ln(upvote_count + 1) + recency_decay</code>. Issues that recur within 30 days receive a 15% multiplier.</p></section>
       </div>
     </main>
   </div>

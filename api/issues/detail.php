@@ -12,6 +12,11 @@ $stmt = $db->prepare('SELECT i.*, u.name AS reporter_name, (SELECT COUNT(*) FROM
 $stmt->execute([(int) $issueId]);
 $issue = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$issue) jsonResponse(404, 'Issue not found.');
+$isStaff = in_array((string) ($_SESSION['user_role'] ?? ''), ['worker', 'admin'], true);
+if (!$isStaff) {
+  $issue['lat'] = round((float) ($issue['lat'] ?? 0), 3);
+  $issue['lng'] = round((float) ($issue['lng'] ?? 0), 3);
+}
 $images = $db->prepare('SELECT id, file_path, original_name, mime_type, file_size, created_at FROM issue_images WHERE issue_id = ? ORDER BY created_at ASC, id ASC');
 $images->execute([(int) $issueId]);
 $issue['images'] = array_map(static function (array $image): array { $image['url'] = '/' . ltrim((string) $image['file_path'], '/'); return $image; }, $images->fetchAll(PDO::FETCH_ASSOC));
@@ -20,6 +25,7 @@ $history->execute([(int) $issueId]);
 $issue['status_history'] = $history->fetchAll(PDO::FETCH_ASSOC);
 $assignment = $db->prepare(
   'SELECT assignment.id, assignment.assigned_at, assignment.completed_at,
+          assignment.citizen_verified_at, assignment.citizen_reopen_reason, assignment.after_image_path,
           worker.name AS worker_name, administrator.name AS assigned_by_name
      FROM assignments assignment
      INNER JOIN users worker ON worker.id = assignment.worker_id

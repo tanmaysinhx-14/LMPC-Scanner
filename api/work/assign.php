@@ -31,7 +31,7 @@ try {
   $db->beginTransaction();
 
   $worker = $db->prepare(
-    "SELECT id, name FROM users WHERE id = ? AND role = 'worker' AND is_active = 1 LIMIT 1"
+    "SELECT id, name, department FROM users WHERE id = ? AND role = 'worker' AND is_active = 1 LIMIT 1"
   );
   $worker->execute([(int) $workerId]);
   $workerRow = $worker->fetch(PDO::FETCH_ASSOC);
@@ -41,7 +41,7 @@ try {
   }
 
   $issue = $db->prepare(
-    "SELECT id, title, status FROM issues
+    "SELECT id, title, status, department FROM issues
       WHERE id = ? AND status IN ('pending', 'acknowledged', 'in_progress')
       LIMIT 1 FOR UPDATE"
   );
@@ -50,6 +50,13 @@ try {
   if (!$issueRow) {
     $db->rollBack();
     jsonResponse(404, 'That issue is not available for assignment.');
+  }
+
+  $issueDepartment = normalizedDepartment($issueRow['department'] ?? 'municipal');
+  $workerDepartment = normalizedDepartment($workerRow['department'] ?? 'municipal');
+  if ($workerDepartment !== 'municipal' && $workerDepartment !== $issueDepartment) {
+    $db->rollBack();
+    jsonResponse(422, 'The selected worker is not assigned to this issue department.');
   }
 
   $active = $db->prepare(

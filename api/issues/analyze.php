@@ -48,7 +48,16 @@ try {
     throw new RuntimeException('Unable to prepare the image for AI analysis.');
   }
 
-  $analysis = callAIService($relativePath);
+  $latitude = filter_var($_POST['latitude'] ?? null, FILTER_VALIDATE_FLOAT);
+  $longitude = filter_var($_POST['longitude'] ?? null, FILTER_VALIDATE_FLOAT);
+  $validLatitude = $latitude !== false && $latitude !== null && $latitude >= -90 && $latitude <= 90;
+  $validLongitude = $longitude !== false && $longitude !== null && $longitude >= -180 && $longitude <= 180;
+  $analysis = callAIService(
+    $relativePath,
+    normalizedCategory($_POST['issueCategory'] ?? null),
+    $validLatitude && $validLongitude ? (float) $latitude : null,
+    $validLatitude && $validLongitude ? (float) $longitude : null
+  );
 } catch (AIServiceException $exception) {
   $errorStatus = 503;
   $errorMessage = $exception->getMessage();

@@ -146,6 +146,16 @@ require_once __DIR__ . '/../../components/header.php';
                         </div>
                         <div class="small text-muted mb-2"><i class="fas fa-map-marker-alt text-primary me-1"></i><?= $e($activity['address'] ?: 'Location recorded') ?> &middot; <?= $e(date('M d', strtotime((string) ($activity['last_reported_at'] ?? $activity['created_at'])))) ?></div>
                         <?php if (!empty($activity['assigned_worker_name'])): ?><div class="small text-success mb-2"><i class="fas fa-helmet-safety me-1"></i>Assigned to <?= $e($activity['assigned_worker_name']) ?><?php if (!empty($activity['assigned_by_name'])): ?> by <?= $e($activity['assigned_by_name']) ?><?php endif; ?><?= empty($activity['assignment_completed_at']) ? '' : ' · Completed' ?></div><?php else: ?><div class="small text-muted mb-2"><i class="fas fa-hourglass-half me-1"></i>Awaiting admin assignment</div><?php endif; ?>
+                        <?php if ($activity['status'] === 'resolved' && !empty($activity['assignment_completed_at']) && empty($activity['citizen_verified_at'])): ?>
+                          <div class="alert alert-success py-2 px-3 small d-flex flex-wrap align-items-center gap-2 mb-2">
+                            <span><i class="fas fa-circle-check me-1"></i>Was the fix completed correctly?</span>
+                            <label class="btn btn-sm btn-outline-secondary mb-0"><i class="fas fa-camera me-1"></i>After-photo<input type="file" accept="image/jpeg,image/png,image/webp" class="d-none" data-after-image="<?= (int) $activity['id'] ?>"></label>
+                            <button type="button" class="btn btn-sm btn-success" data-verify-resolution="<?= (int) $activity['id'] ?>">Yes, verify</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-reopen-resolution="<?= (int) $activity['id'] ?>">Reopen</button>
+                          </div>
+                        <?php elseif (!empty($activity['citizen_verified_at'])): ?>
+                          <div class="small text-success mb-2"><i class="fas fa-shield-heart me-1"></i>Resolution verified by you</div>
+                        <?php endif; ?>
                         <div class="d-flex gap-2">
                           <span class="badge bg-light text-dark border"><i class="fas fa-tag me-1 text-muted"></i><?= $e(issueCategoryLabel($activity['category'])) ?></span>
                           <span class="badge bg-light text-dark border"><i class="fas fa-users me-1 text-muted"></i><?= (int) $activity['citizen_report_count'] ?></span>
@@ -177,6 +187,41 @@ require_once __DIR__ . '/../../components/header.php';
       </div>
     </main>
   </div>
+  <script>
+    const citizenResolutionCsrf = <?= json_encode(csrfToken(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    async function updateResolution(issueId, action, reason = '', afterImage = null) {
+      const options = {method: 'POST'};
+      if (afterImage) {
+        const formData = new FormData();
+        formData.append('csrf_token', citizenResolutionCsrf);
+        formData.append('issue_id', String(issueId));
+        formData.append('action', action);
+        formData.append('reason', reason);
+        formData.append('after_image', afterImage, afterImage.name);
+        options.body = formData;
+      } else {
+        options.headers = {'Content-Type': 'application/json', 'X-CSRF-Token': citizenResolutionCsrf};
+        options.body = JSON.stringify({issue_id: issueId, action, reason});
+      }
+      const response = await fetch('../../api/issues/verify-resolution.php', options);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || 'The resolution could not be updated.');
+      window.location.reload();
+    }
+    document.querySelectorAll('[data-verify-resolution]').forEach(button => button.addEventListener('click', async () => {
+      button.disabled = true;
+      const imageInput = document.querySelector(`[data-after-image="${button.dataset.verifyResolution}"]`);
+      try { await updateResolution(Number(button.dataset.verifyResolution), 'verify', '', imageInput?.files?.[0] || null); }
+      catch (error) { window.alert(error.message); button.disabled = false; }
+    }));
+    document.querySelectorAll('[data-reopen-resolution]').forEach(button => button.addEventListener('click', async () => {
+      const reason = window.prompt('What still needs to be fixed?');
+      if (!reason || !reason.trim()) return;
+      button.disabled = true;
+      try { await updateResolution(Number(button.dataset.reopenResolution), 'reopen', reason.trim()); }
+      catch (error) { window.alert(error.message); button.disabled = false; }
+    }));
+  </script>
   <?php require_once __DIR__ . '/../../components/footer.php'; ?>
 </body>
 </html>

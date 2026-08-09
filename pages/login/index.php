@@ -7,8 +7,9 @@
 ?>
 
 <?php // Backend for Login
-  $email = '';
-  $selectedRole = '';
+  // Prototype demo defaults. POST values replace these after a submission.
+  $email = 'mail.citizen@gmail.com';
+  $selectedRole = 'citizen';
 
   if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     requireCsrfToken();
@@ -141,6 +142,7 @@
                       placeholder="Enter your password"
                       required 
                       minlength="8" 
+                      value="Citizen@123"
                       autocomplete="current-password"
                     >
                     <button type="button" class="btn btn-outline-secondary border-start-0 text-muted" onclick="togglePassword()">
@@ -200,7 +202,21 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+      const demoCredentials = {
+        citizen: {email: 'mail.citizen@gmail.com', password: 'Citizen@123'},
+        worker: {email: 'mail.worker@gmail.com', password: 'Worker@123'},
+        admin: {email: 'mail.admin@gmail.com', password: 'Admin@123'}
+      };
+      const roleInput = document.getElementById('loginRole');
+      const emailInput = document.getElementById('loginEmail');
       const passwordInput = document.getElementById('loginPassword');
+      roleInput?.addEventListener('change', function() {
+        const demo = demoCredentials[this.value];
+        if (!demo) return;
+        emailInput.value = demo.email;
+        passwordInput.value = demo.password;
+      });
+
       if (passwordInput) {
         passwordInput.addEventListener('keypress', function(e) {
           if (e.key === 'Enter') {

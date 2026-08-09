@@ -129,6 +129,10 @@
 
   <?php require_once __DIR__ . '/../../components/footer.php'; ?>
   <script type="text/javascript">
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('../../sw.js', {scope: '../../'}).catch(() => {});
+    }
+
     function showToast(message, type = 'info') {
       const toast = document.getElementById('statusToast');
       document.getElementById('toastMessage').textContent = message;
@@ -238,6 +242,9 @@
       const previewData = new FormData();
       previewData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
       previewData.append('issueImage', file, file.name);
+      previewData.append('issueCategory', document.getElementById('category').value);
+      previewData.append('latitude', document.getElementById('latitude').value);
+      previewData.append('longitude', document.getElementById('longitude').value);
 
       try {
         const response = await fetch('../../api/issues/analyze.php', {

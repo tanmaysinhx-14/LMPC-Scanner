@@ -22,6 +22,38 @@ function issueStatusClass(?string $status): string
   };
 }
 
+function normalizedDepartment(?string $department): string
+{
+  $department = strtolower(trim((string) $department));
+  $allowed = ['sanitation', 'drainage', 'public_works', 'electricity', 'municipal'];
+  return in_array($department, $allowed, true) ? $department : 'municipal';
+}
+
+function departmentForCategory(?string $category): string
+{
+  return match (strtolower(trim((string) $category))) {
+    'garbage' => 'sanitation',
+    'waterlogging', 'open_drain' => 'drainage',
+    'streetlight' => 'electricity',
+    'pothole', 'road_damage', 'graffiti' => 'public_works',
+    default => 'municipal',
+  };
+}
+
+function civicPriorityFormula(): string
+{
+  return '(severity x 2) + ln(report_count + 1) + ln(upvote_count + 1) + recency_decay, with a 15% recurrence multiplier';
+}
+
+function calculatePriorityScore(int $severity, int $reportCount, int $upvoteCount, ?string $createdAt = null, bool $recurring = false): float
+{
+  $createdTimestamp = $createdAt ? strtotime($createdAt) : time();
+  $ageHours = max(0.0, (time() - ($createdTimestamp ?: time())) / 3600);
+  $recencyDecay = 5.0 * exp(-$ageHours / (24.0 * 7.0));
+  $score = ($severity * 2.0) + log($reportCount + 1.0) + log($upvoteCount + 1.0) + $recencyDecay;
+  return round($score * ($recurring ? 1.15 : 1.0), 4);
+}
+
 function issueImageUrl(?string $path): string
 {
   if (!$path) {
@@ -82,9 +114,9 @@ function fetchIssueFeed(PDO $db, array $options = []): array
   };
 
   $stmt = $db->prepare(
-    "SELECT i.id, i.title, i.description, i.category, i.severity, i.status,
+    "SELECT i.id, i.title, i.description, i.category, i.department, i.severity, i.status,
             i.lat, i.lng, i.address, i.upvote_count, i.is_verified,
-            i.ai_confidence, i.priority_score, i.created_at, i.updated_at,
+            i.ai_confidence, i.priority_score, i.is_recurring, i.recurrence_of, i.created_at, i.updated_at,
             u.name AS reporter_name,
             (SELECT worker.name
                FROM assignments assignment
@@ -103,6 +135,11 @@ function fetchIssueFeed(PDO $db, array $options = []): array
               WHERE assignment.issue_id = i.id
               ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
               LIMIT 1) AS assignment_completed_at,
+            (SELECT assignment.citizen_verified_at
+               FROM assignments assignment
+              WHERE assignment.issue_id = i.id
+              ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
+              LIMIT 1) AS citizen_verified_at,
             (SELECT COUNT(*) FROM issue_images ii WHERE ii.issue_id = i.id) AS image_count,
             (SELECT COUNT(*) FROM issue_reports ir WHERE ir.issue_id = i.id) AS report_count,
             (SELECT COUNT(*) FROM status_history sh WHERE sh.issue_id = i.id) AS update_count,
@@ -132,6 +169,8 @@ function fetchIssueFeed(PDO $db, array $options = []): array
     $issue['report_count'] = (int) $issue['report_count'];
     $issue['update_count'] = (int) $issue['update_count'];
     $issue['viewer_upvoted'] = (bool) $issue['viewer_upvoted'];
+    $issue['is_recurring'] = (bool) $issue['is_recurring'];
+    $issue['citizen_verified'] = !empty($issue['citizen_verified_at']);
     $issue['cover_url'] = issueImageUrl($issue['cover_path'] ?? null);
     return $issue;
   }, $stmt->fetchAll(PDO::FETCH_ASSOC));
@@ -177,7 +216,7 @@ function fetchCitizenDashboardData(PDO $db, int $userId): array
   $stats['upvotes'] = (int) ($statsRow['upvotes'] ?? 0);
 
   $activityStmt = $db->prepare(
-    "SELECT i.id, i.title, i.category, i.status, i.address, i.upvote_count,
+    "SELECT i.id, i.title, i.category, i.department, i.status, i.address, i.upvote_count,
              i.created_at, i.updated_at,
              (SELECT worker.name
                 FROM assignments assignment
@@ -201,6 +240,11 @@ function fetchCitizenDashboardData(PDO $db, int $userId): array
                WHERE assignment.issue_id = i.id
                ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
                LIMIT 1) AS assignment_completed_at,
+             (SELECT assignment.citizen_verified_at
+                FROM assignments assignment
+               WHERE assignment.issue_id = i.id
+               ORDER BY assignment.completed_at IS NULL DESC, assignment.assigned_at DESC, assignment.id DESC
+               LIMIT 1) AS citizen_verified_at,
              MAX(ir.created_at) AS last_reported_at,
              COUNT(ir.id) AS citizen_report_count,
              (SELECT COUNT(*) FROM issue_images ii WHERE ii.issue_id = i.id) AS image_count,
@@ -209,7 +253,7 @@ function fetchCitizenDashboardData(PDO $db, int $userId): array
              (SELECT COUNT(*) FROM status_history sh WHERE sh.issue_id = i.id) AS update_count
        FROM issues i
        INNER JOIN issue_reports ir ON ir.issue_id = i.id AND ir.reporter_id = ?
-      GROUP BY i.id, i.title, i.category, i.status, i.address, i.upvote_count, i.created_at, i.updated_at
+      GROUP BY i.id, i.title, i.category, i.department, i.status, i.address, i.upvote_count, i.created_at, i.updated_at
       ORDER BY last_reported_at DESC, i.id DESC
       LIMIT 6"
   );
@@ -220,6 +264,7 @@ function fetchCitizenDashboardData(PDO $db, int $userId): array
     $row['citizen_report_count'] = (int) $row['citizen_report_count'];
     $row['image_count'] = (int) $row['image_count'];
     $row['update_count'] = (int) $row['update_count'];
+    $row['citizen_verified'] = !empty($row['citizen_verified_at']);
     $row['cover_url'] = issueImageUrl($row['cover_path'] ?? null);
     return $row;
   }, $activityStmt->fetchAll(PDO::FETCH_ASSOC));
