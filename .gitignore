@@ -14,17 +14,29 @@ raw/
 # Contains run log of AI-Model training
 runs/
 
-# Unzipped Roboflow Dataset
+# Roboflow Dataset (YOLOv8)
 archives/fallen_tree.yolov8
 archives/garbage.yolov8
 archives/graffiti.yolov8
 archives/pothole.yolov8
 archives/water_logging.yolov8
 
+# Roboflow Dataset (YOLO26)
+archives/trash.yolo26
+archives/pothole.yolo26
+
+# Merged Roboflow Dataset
+civic-dataset/
+
 # AI-Model based files
 *.pt
 *.onnx
 quantize.py
+
+upload/
+
+# Repomix Output and Configuration Files
+repomix-output.xml
 
 # User-specific files
 *.rsuser
