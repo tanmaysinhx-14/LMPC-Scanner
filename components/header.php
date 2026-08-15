@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../../assets/css/civic-ui.css">
-  <link rel="stylesheet" href="../../assets/css/toast.css">
+  <link rel="stylesheet" href="<?= htmlspecialchars(civicAsset('css/civic-ui.css'), ENT_QUOTES, 'UTF-8') ?>">
+  <link rel="stylesheet" href="<?= htmlspecialchars(civicAsset('css/toast.css'), ENT_QUOTES, 'UTF-8') ?>">
 </head>
 
 <?php if (!empty($_SESSION['toasts'])): ?>

@@ -2,8 +2,9 @@
   require __DIR__ . '/../../bootstrap.php';
   $bootstrapData = bootstrapAccounts(options: ['required_roles' => ['citizen']]);
   extract($bootstrapData);
+  $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 ?>
-<?php require_once __DIR__ . '/../../components/header.php'; ?>
+<?php require_once CIVICCONNECT_ROOT . '/components/header.php'; ?>
 
 <body class="bg-light">
   <style>
@@ -16,12 +17,12 @@
 
   <nav class="navbar report-topnav sticky-top px-3 py-2">
     <div class="container-fluid px-lg-4">
-      <a class="navbar-brand d-flex align-items-center gap-2" href="../citizen/citizen-dashboard.php"><span class="feed-brand-icon"><i class="fas fa-city"></i></span><span>CivicConnect</span></a>
+      <a class="navbar-brand d-flex align-items-center gap-2" href="<?= $e(civicRoute('dashboard')) ?>"><span class="feed-brand-icon"><i class="fas fa-city"></i></span><span>CivicConnect</span></a>
       <div class="d-flex align-items-center gap-2">
-        <a class="btn btn-sm btn-outline-secondary" href="../citizen/citizen-dashboard.php"><i class="fas fa-th-large me-1"></i><span class="d-none d-sm-inline">Dashboard</span></a>
-        <a class="btn btn-sm btn-outline-secondary" href="../citizen/public-feed.php"><i class="fas fa-globe me-1"></i><span class="d-none d-md-inline">Public feed</span></a>
-        <a class="btn btn-sm btn-outline-secondary" href="../heatmap/"><i class="fas fa-map-location-dot me-1"></i><span class="d-none d-md-inline">City pulse</span></a>
-        <a class="btn btn-sm btn-link text-danger text-decoration-none" href="../logout/"><i class="fas fa-sign-out-alt me-1"></i><span class="d-none d-sm-inline">Logout</span></a>
+        <a class="btn btn-sm btn-outline-secondary" href="<?= $e(civicRoute('dashboard')) ?>"><i class="fas fa-th-large me-1"></i><span class="d-none d-sm-inline">Dashboard</span></a>
+        <a class="btn btn-sm btn-outline-secondary" href="<?= $e(civicRoute('feed')) ?>"><i class="fas fa-globe me-1"></i><span class="d-none d-md-inline">Public feed</span></a>
+        <a class="btn btn-sm btn-outline-secondary" href="<?= $e(civicRoute('pulse')) ?>"><i class="fas fa-map-location-dot me-1"></i><span class="d-none d-md-inline">City pulse</span></a>
+        <a class="btn btn-sm btn-link text-danger text-decoration-none" href="<?= $e(civicRoute('logout')) ?>"><i class="fas fa-sign-out-alt me-1"></i><span class="d-none d-sm-inline">Logout</span></a>
       </div>
     </div>
   </nav>
@@ -71,8 +72,12 @@
                       <span class="small fw-semibold text-primary"><i class="fas fa-robot me-2"></i>AI Analysis Complete</span>
                       <span id="aiConfidence" class="badge bg-success"></span>
                     </div>
+                    <div id="aiAnnotatedPreview" class="d-none mb-3 rounded-3 overflow-hidden border border-primary-subtle bg-dark">
+                      <img id="aiAnnotatedImage" src="" alt="AI annotated detection preview" class="w-100 d-block" style="max-height: 420px; object-fit: contain;">
+                    </div>
                     <p class="small mb-0 text-dark">Detected Issue: <strong id="severityCategory" class="text-danger ms-1"></strong></p>
                     <p class="small mb-0 text-dark">Detected Severity: <strong id="severityDisplay" class="text-danger ms-1"></strong></p>
+                    <p class="small mb-0 text-dark">Objects highlighted: <strong id="detectionSummary" class="text-primary ms-1"></strong></p>
                   </div>
                 </div>
 
@@ -127,10 +132,10 @@
     </div>
   </div>
 
-  <?php require_once __DIR__ . '/../../components/footer.php'; ?>
+  <?php require_once CIVICCONNECT_ROOT . '/components/footer.php'; ?>
   <script type="text/javascript">
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('../../sw.js', {scope: '../../'}).catch(() => {});
+      navigator.serviceWorker.register(<?= json_encode(civicAsset('js/sw.js')) ?>, {scope: <?= json_encode(civicApplicationBaseUrl() . '/') ?>}).catch(() => {});
     }
 
     function showToast(message, type = 'info') {
@@ -204,6 +209,7 @@
       const confidenceValue = Math.max(0, Math.min(1, Number(ai.confidence)));
       const confidence = Math.round(confidenceValue * 100);
       const severity = Number(ai.severity);
+      const detections = Array.isArray(ai.detections) ? ai.detections : [];
       const categorySelect = document.getElementById('category');
       const matchingOption = Array.from(categorySelect.options).find(option =>
         option.value.toLowerCase() === ai.category.toLowerCase()
@@ -219,6 +225,24 @@
       document.getElementById('severityCategory').textContent = categoryLabel;
       document.getElementById('severityDisplay').textContent = `${severity}/5`;
       document.getElementById('aiConfidence').textContent = `${confidence}% Match`;
+      document.getElementById('detectionSummary').textContent = detections.length
+        ? `${detections.length} ${detections.length === 1 ? 'object' : 'objects'} found and boxed`
+        : 'No confident object found';
+
+      if (Object.prototype.hasOwnProperty.call(ai, 'annotated_image')) {
+        const annotatedImage = typeof ai.annotated_image === 'string' && /^data:image\/(?:jpeg|png|webp);base64,/.test(ai.annotated_image)
+          ? ai.annotated_image
+          : '';
+        const annotatedPreview = document.getElementById('aiAnnotatedPreview');
+        const annotatedImageElement = document.getElementById('aiAnnotatedImage');
+        if (annotatedImage) {
+          annotatedImageElement.src = annotatedImage;
+          annotatedPreview.classList.remove('d-none');
+        } else {
+          annotatedImageElement.removeAttribute('src');
+          annotatedPreview.classList.add('d-none');
+        }
+      }
     }
 
     document.getElementById('removeImageBtn').addEventListener('click', () => {
@@ -247,7 +271,7 @@
       previewData.append('longitude', document.getElementById('longitude').value);
 
       try {
-        const response = await fetch('../../api/issues/analyze.php', {
+        const response = await fetch(<?= json_encode(civicApi('issues/analyze.php')) ?>, {
           method: 'POST',
           body: previewData
         });
@@ -274,7 +298,7 @@ document.getElementById('issueReportForm').addEventListener('submit', async (e) 
       btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Analyzing & saving...';
 
       try {
-        const response = await fetch('../../api/issues/submit.php', { method: 'POST', body: new FormData(form) });
+        const response = await fetch(<?= json_encode(civicApi('issues/submit.php')) ?>, { method: 'POST', body: new FormData(form) });
         const result = await response.json();
 
         if (!response.ok) {
@@ -292,7 +316,7 @@ document.getElementById('issueReportForm').addEventListener('submit', async (e) 
           btn.innerHTML = '<i class="fas fa-check me-2"></i>Saved — redirecting';
           // A simple redirect. The API has already queued the toast in the PHP session.
           window.setTimeout(() => {
-            window.location.href = '../citizen/citizen-dashboard.php';
+            window.location.href = <?= json_encode(civicRoute('dashboard')) ?>;
           }, 900);
         }
       } catch (error) {

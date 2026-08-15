@@ -12,6 +12,7 @@ $stmt = $db->prepare('SELECT i.*, u.name AS reporter_name, (SELECT COUNT(*) FROM
 $stmt->execute([(int) $issueId]);
 $issue = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$issue) jsonResponse(404, 'Issue not found.');
+$viewer = sessionUser();
 $isStaff = in_array((string) ($_SESSION['user_role'] ?? ''), ['worker', 'admin'], true);
 if (!$isStaff) {
   $issue['lat'] = round((float) ($issue['lat'] ?? 0), 3);
@@ -36,5 +37,22 @@ $assignment = $db->prepare(
 );
 $assignment->execute([(int) $issueId]);
 $issue['assignment'] = $assignment->fetch(PDO::FETCH_ASSOC) ?: null;
+$issue['viewer_reported'] = false;
+$issue['viewer_upvoted'] = false;
+if ($viewer !== null) {
+  $reported = $db->prepare('SELECT 1 FROM issue_reports WHERE issue_id = ? AND reporter_id = ? LIMIT 1');
+  $reported->execute([(int) $issueId, (int) $viewer['id']]);
+  $issue['viewer_reported'] = (bool) $reported->fetchColumn();
+  $upvoted = $db->prepare('SELECT 1 FROM upvotes WHERE issue_id = ? AND user_id = ? LIMIT 1');
+  $upvoted->execute([(int) $issueId, (int) $viewer['id']]);
+  $issue['viewer_upvoted'] = (bool) $upvoted->fetchColumn();
+}
+$issue['id'] = (int) $issue['id'];
+$issue['severity'] = (int) $issue['severity'];
+$issue['upvote_count'] = (int) $issue['upvote_count'];
 $issue['report_count'] = (int) $issue['report_count'];
+$issue['image_count'] = count($issue['images']);
+$issue['cover_url'] = issueImageUrl($issue['images'][0]['file_path'] ?? null);
+$issue['report_count'] = (int) $issue['report_count'];
+$issue = enrichIssueWithCommunitySignals($db, $issue);
 jsonResponse(200, 'Issue loaded.', ['issue' => $issue]);

@@ -459,7 +459,7 @@
     <nav id="landingNavbar" class="navbar navbar-expand-lg sticky-top bg-white bg-opacity-80 backdrop-blur border-bottom" role="navigation" aria-label="Main navigation">
         <div class="container-fluid px-4">
             <!-- Brand -->
-            <a href="index.php" id="brandLink" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary" aria-label="CivicConnect Home">
+            <a href="<?= htmlspecialchars(civicRoute('home'), ENT_QUOTES, 'UTF-8') ?>" id="brandLink" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary" aria-label="CivicConnect Home">
                 <span class="brand-icon d-inline-flex align-items-center justify-content-center rounded-3 text-white" style="width:36px;height:36px;background:var(--color-primary-gradient);">
                     <i class="fas fa-city"></i>
                 </span>
@@ -484,7 +484,7 @@
                         <a href="#testimonials" class="nav-link fw-medium text-secondary position-relative">Testimonials</a>
                     </li>
                     <li class="nav-item">
-                        <a href="pages/citizen/public-feed.php" class="nav-link fw-medium text-secondary position-relative">Community Feed</a>
+                        <a href="<?= htmlspecialchars(civicRoute('feed'), ENT_QUOTES, 'UTF-8') ?>" class="nav-link fw-medium text-secondary position-relative">Community Feed</a>
                     </li>
                 </ul>
             </div>
@@ -512,12 +512,12 @@
                         <i class="fas fa-chevron-down ms-1"></i>
                     </button>
                     <div id="getStartedDropdown" class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-3 py-2" role="menu">
-                        <a href="pages/register/index.php" class="dropdown-item py-2" role="menuitem">
+                        <a href="<?= htmlspecialchars(civicRoute('register'), ENT_QUOTES, 'UTF-8') ?>" class="dropdown-item py-2" role="menuitem">
                             <i class="fas fa-user-plus me-2 text-primary"></i>
                             Sign Up
                         </a>
                         <div class="dropdown-divider"></div>
-                        <a href="pages/login/index.php" class="dropdown-item py-2" role="menuitem">
+                        <a href="<?= htmlspecialchars(civicRoute('login'), ENT_QUOTES, 'UTF-8') ?>" class="dropdown-item py-2" role="menuitem">
                             <i class="fas fa-sign-in-alt me-2 text-primary"></i>
                             Log In
                         </a>
@@ -550,7 +550,7 @@
                     </p>
                     
                     <div class="d-flex flex-wrap gap-3 mb-4">
-                        <a href="pages/register/index.php" id="heroGetStartedBtn" class="btn btn-primary btn-lg rounded-pill px-5">
+                            <a href="<?= htmlspecialchars(civicRoute('register'), ENT_QUOTES, 'UTF-8') ?>" id="heroGetStartedBtn" class="btn btn-primary btn-lg rounded-pill px-5">
                             <i class="fas fa-arrow-right me-2"></i>
                             Get Started
                         </a>
@@ -819,11 +819,11 @@
                             track progress, and help build smarter cities.
                         </p>
                         <div class="d-flex flex-wrap gap-3 justify-content-center">
-                            <a href="pages/register/index.php" id="ctaGetStartedBtn" class="btn btn-primary btn-lg rounded-pill px-5">
+                            <a href="<?= htmlspecialchars(civicRoute('register'), ENT_QUOTES, 'UTF-8') ?>" id="ctaGetStartedBtn" class="btn btn-primary btn-lg rounded-pill px-5">
                                 <i class="fas fa-rocket me-2"></i>
                                 Get Started Free
                             </a>
-                            <a href="pages/login/index.php" id="ctaLoginBtn" class="btn btn-outline-primary btn-lg rounded-pill px-5">
+                            <a href="<?= htmlspecialchars(civicRoute('login'), ENT_QUOTES, 'UTF-8') ?>" id="ctaLoginBtn" class="btn btn-outline-primary btn-lg rounded-pill px-5">
                                 <i class="fas fa-sign-in-alt me-2"></i>
                                 Sign In
                             </a>
@@ -857,20 +857,20 @@
                 <div class="col-6 col-md-3">
                     <h5 class="text-white mb-3">Platform</h5>
                     <ul class="list-unstyled">
-                        <li><a href="pages/citizen/public-feed.php" class="text-white-50 text-decoration-none hover-text-white">Community Feed</a></li>
-                        <li><a href="pages/heatmap/" class="text-white-50 text-decoration-none hover-text-white">City Pulse</a></li>
-                        <li><a href="pages/report/" class="text-white-50 text-decoration-none hover-text-white">Report an Issue</a></li>
-                        <li><a href="pages/register/" class="text-white-50 text-decoration-none hover-text-white">Create an Account</a></li>
+                        <li><a href="<?= htmlspecialchars(civicRoute('feed'), ENT_QUOTES, 'UTF-8') ?>" class="text-white-50 text-decoration-none hover-text-white">Community Feed</a></li>
+                        <li><a href="<?= htmlspecialchars(civicRoute('pulse'), ENT_QUOTES, 'UTF-8') ?>" class="text-white-50 text-decoration-none hover-text-white">City Pulse</a></li>
+                        <li><a href="<?= htmlspecialchars(civicRoute('report'), ENT_QUOTES, 'UTF-8') ?>" class="text-white-50 text-decoration-none hover-text-white">Report an Issue</a></li>
+                        <li><a href="<?= htmlspecialchars(civicRoute('register'), ENT_QUOTES, 'UTF-8') ?>" class="text-white-50 text-decoration-none hover-text-white">Create an Account</a></li>
                     </ul>
                 </div>
                 
                 <div class="col-6 col-md-3">
                     <h5 class="text-white mb-3">Support</h5>
                     <ul class="list-unstyled">
-                        <li><a href="pages/login/" class="text-white-50 text-decoration-none hover-text-white">Account Access</a></li>
-                        <li><a href="pages/citizen/public-feed.php" class="text-white-50 text-decoration-none hover-text-white">Track Reports</a></li>
+                        <li><a href="<?= htmlspecialchars(civicRoute('login'), ENT_QUOTES, 'UTF-8') ?>" class="text-white-50 text-decoration-none hover-text-white">Account Access</a></li>
+                        <li><a href="<?= htmlspecialchars(civicRoute('feed'), ENT_QUOTES, 'UTF-8') ?>" class="text-white-50 text-decoration-none hover-text-white">Track Reports</a></li>
                         <li><a href="#how-it-works" class="text-white-50 text-decoration-none hover-text-white">How It Works</a></li>
-                        <li><a href="pages/heatmap/" class="text-white-50 text-decoration-none hover-text-white">Map Help</a></li>
+                        <li><a href="<?= htmlspecialchars(civicRoute('pulse'), ENT_QUOTES, 'UTF-8') ?>" class="text-white-50 text-decoration-none hover-text-white">Map Help</a></li>
                     </ul>
                 </div>
                 
@@ -879,8 +879,8 @@
                     <ul class="list-unstyled">
                         <li><a href="#features" class="text-white-50 text-decoration-none hover-text-white">About the Platform</a></li>
                         <li><a href="#testimonials" class="text-white-50 text-decoration-none hover-text-white">Community Stories</a></li>
-                        <li><a href="pages/login/" class="text-white-50 text-decoration-none hover-text-white">Staff Access</a></li>
-                        <li><a href="pages/register/" class="text-white-50 text-decoration-none hover-text-white">Join CivicConnect</a></li>
+                        <li><a href="<?= htmlspecialchars(civicRoute('login'), ENT_QUOTES, 'UTF-8') ?>" class="text-white-50 text-decoration-none hover-text-white">Staff Access</a></li>
+                        <li><a href="<?= htmlspecialchars(civicRoute('register'), ENT_QUOTES, 'UTF-8') ?>" class="text-white-50 text-decoration-none hover-text-white">Join CivicConnect</a></li>
                     </ul>
                 </div>
             </div>

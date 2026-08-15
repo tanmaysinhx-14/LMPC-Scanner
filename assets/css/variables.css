@@ -5,14 +5,14 @@
 
 :root {
     /* ===== BRAND COLORS ===== */
-    --color-primary: #4F46E5;
-    --color-primary-light: #818CF8;
-    --color-primary-dark: #3730A3;
-    --color-primary-gradient: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+    --color-primary: #4255C7;
+    --color-primary-light: #7B8BE8;
+    --color-primary-dark: #273379;
+    --color-primary-gradient: linear-gradient(135deg, #273379 0%, #4255C7 58%, #0F9F8F 100%);
     
-    --color-secondary: #0EA5E9;
-    --color-secondary-light: #38BDF8;
-    --color-secondary-dark: #0284C7;
+    --color-secondary: #0F9F8F;
+    --color-secondary-light: #51C7B6;
+    --color-secondary-dark: #087568;
     
     --color-success: #10B981;
     --color-success-light: #34D399;
@@ -31,7 +31,7 @@
     --color-info-dark: #4F46E5;
 
     /* ===== LIGHT MODE ===== */
-    --bg-body: #F8FAFC;
+    --bg-body: #F3F6FB;
     --bg-surface: #FFFFFF;
     --bg-surface-2: #F1F5F9;
     --bg-surface-3: #E2E8F0;

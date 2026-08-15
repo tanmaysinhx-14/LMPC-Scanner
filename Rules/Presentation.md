@@ -1,34 +1,32 @@
-# CivicConnect presentation plan
+# CivicConnect presentation plan: current web prototype and mobile migration
 
 ## Recommended ten-slide deck
 
 ### 1. Title
 
-CivicConnect — evidence-backed civic resolution intelligence. Show the City Pulse visual and the one-line pitch.
+CivicConnect - evidence-backed civic resolution intelligence. Show the current City Pulse visual and state that the next delivery is a native mobile client on the same backend.
 
 ### 2. The problem
 
-Show common urban issues and the fragmented reporting-to-resolution gap. State the citizen, administrator, and worker consequences.
+Show potholes, garbage, graffiti, damaged roads, blocked drains, and waterlogging alongside the fragmented reporting-to-resolution gap.
 
 ### 3. Why existing complaint flows fall short
 
-Explain duplication, weak classification, unclear priority, opaque assignment, and lack of spatial context. Keep the comparison grounded in the archived study.
+Explain duplication, weak evidence structure, unclear priority, opaque assignment, and lack of spatial context. Keep comparisons grounded in the archived study.
 
-### 4. The solution
+### 4. The current web solution
 
-Show: report → AI assist → group → prioritise → assign → execute → transparent status.
+Show: report -> server AI assist -> group -> prioritise -> assign -> execute -> update -> transparent status.
 
-### 5. Citizen experience
+### 5. The mobile migration goal
 
-Show the report form, image/location evidence, AI result, community feed, and issue tracking.
+Show the same flow on a phone: capture photo -> obtain GPS -> see local preview -> receive annotated AI preview -> confirm -> submit -> track. Say “planned mobile client” until the native build is tested.
 
-### 6. City Pulse
+### 6. City Pulse and shared backend
 
-Show the database-backed MapLibre page, category/status filters, dense clusters, and feed deep link. Say “current signal,” not “prediction.”
+Show the database-backed MapLibre page and explain that the planned mobile map will consume the same live API data through MapLibre React Native.
 
 ### 7. Three-role operating model
-
-Use a three-column diagram:
 
 ```text
 Citizen                 Admin                    Worker
@@ -39,20 +37,21 @@ See assignment          See city picture         Update assignment
 
 ### 8. Technology and trust
 
-Show PHP + MariaDB, Python/ONNX AI, MapLibre, geohash grouping, CSRF/RBAC, transactions, prepared SQL, and audit tables.
+Show PHP + MariaDB, versioned JSON/multipart APIs, FastAPI + Ultralytics detector, Expo/React Native + TypeScript, MapLibre, geohash grouping, bearer auth for mobile, CSRF for web, transactions, prepared SQL, and audit tables.
 
-### 9. Impact and roadmap
+### 9. Impact and migration roadmap
 
-Pilot metrics: acknowledgement time, grouping rate, assignment rate, completion time, classification quality, and citizen visibility. Roadmap: verified resolution, omnichannel access, SLA, recurrence, and prediction.
+Use pilot metrics: acknowledgement time, grouping rate, assignment rate, completion time, classification quality, upload success, and citizen visibility. Show the four migration phases from `MOBILE_MIGRATION_BLUEPRINT.md`.
 
 ### 10. Ask/closing
 
-Close with the one-line pitch and the pilot request: a ward-level dataset, worker/admin validation, and outcome measurement.
+Close with the one-line pitch and the pilot request: a ward-level dataset, worker/admin validation, Android testers, an HTTPS API environment, and outcome measurement.
 
 ## Slide design rules
 
 - One message per slide.
-- Prefer product screenshots and a simple workflow diagram to paragraphs.
+- Prefer real product screenshots and a simple current-to-target architecture diagram.
 - Use real database-backed demo numbers and label them as prototype data.
-- Keep “implemented now” and “roadmap” visually separate.
+- Keep “implemented now”, “migration in progress”, and “roadmap” visually separate.
+- Do not show a mobile screenshot until it is produced by a tested mobile build.
 - Use accessible contrast, large labels, and no dense unreadable architecture diagram.

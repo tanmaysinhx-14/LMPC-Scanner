@@ -70,6 +70,8 @@ $gpsAccuracy = $gpsAccuracy === false ? null : max(0.0, min(10000.0, (float) $gp
 
 try {
   $image = storeUploadedIssueImage($_FILES['issueImage'] ?? $_FILES['image'] ?? []);
+  // The final request is always re-analyzed server-side, but it does not need
+  // to repeat the large annotated preview already shown after file selection.
   $ai = callAIService($image['relative_path'], $submittedCategory, (float) $latitude, (float) $longitude);
   $category = (($ai['category'] ?? 'unknown') === 'unknown' || !empty($ai['low_confidence'])) ? $submittedCategory : $ai['category'];
   $department = (($ai['category'] ?? 'unknown') === 'unknown' || !empty($ai['low_confidence']))
@@ -81,7 +83,7 @@ try {
 
   $db->beginTransaction();
   $duplicate = $db->prepare(
-    "SELECT id, upvote_count, severity, department FROM issues
+    "SELECT id, upvote_count, severity, department, lat, lng, created_at, is_recurring FROM issues
       WHERE geohash LIKE :geohash_prefix AND category = :category
         AND status NOT IN ('resolved', 'rejected')
         AND created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
@@ -113,16 +115,29 @@ try {
     $reportCountStmt->execute([$issueId]);
     $reportCount = (int) $reportCountStmt->fetchColumn();
     $newSeverity = max((int) $existing['severity'], $severity);
-    $newUpvotes = (int) $existing['upvote_count'] + 1;
-    $priority = calculatePriorityScore($newSeverity, $reportCount, $newUpvotes, null, false);
+    // A second citizen report is evidence, not an artificial upvote. The
+    // proximity-aware score gives it weight through report_count instead.
+    $newUpvotes = (int) $existing['upvote_count'];
+    $priorityAssessment = calculatePriorityAssessment(
+      $db,
+      $issueId,
+      (float) $existing['lat'],
+      (float) $existing['lng'],
+      $category,
+      $newSeverity,
+      $reportCount,
+      $newUpvotes,
+      (string) $existing['created_at'],
+      !empty($existing['is_recurring'])
+    );
     $db->prepare(
       'UPDATE issues SET upvote_count = ?, severity = ?, department = ?, priority_score = ?, updated_at = NOW()
        WHERE id = ?'
-    )->execute([$newUpvotes, $newSeverity, $department, $priority, $issueId]);
+    )->execute([$newUpvotes, $newSeverity, $department, $priorityAssessment['score'], $issueId]);
     $db->commit();
     $message = 'Your report was grouped with an existing nearby issue.';
     setToast($message, 'success');
-    jsonResponse(201, $message, ['issue_id' => $issueId, 'grouped' => true, 'category' => $category, 'ai' => $ai]);
+    jsonResponse(201, $message, ['issue_id' => $issueId, 'grouped' => true, 'category' => $category, 'priority' => $priorityAssessment, 'ai' => $ai]);
   }
 
   $recurrenceStmt = $db->prepare(
@@ -134,15 +149,14 @@ try {
   $recurrenceStmt->execute([$category, substr($geohash, 0, geohashPrecisionForCategory($category)) . '%']);
   $recurrenceOf = $recurrenceStmt->fetchColumn();
   $isRecurring = $recurrenceOf !== false;
-  $priority = calculatePriorityScore($severity, 1, 0, null, $isRecurring);
   $title = ucfirst(str_replace('_', ' ', $category)) . ' reported nearby';
   $insertIssue = $db->prepare(
     'INSERT INTO issues
       (user_id, title, description, category, department, severity, status, lat, lng, geohash, address, ward_id,
        upvote_count, is_verified, ai_confidence, is_manipulated, priority_score, is_recurring, recurrence_of, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, NOW(), NOW())'
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, 0, ?, ?, NOW(), NOW())'
   );
-  $insertIssue->execute([$user['id'], $title, $description, $category, $department, $severity, 'pending', $latitude, $longitude, $geohash, $address, $user['ward_id'], $ai['confidence'], (int) $ai['is_manipulated'], $priority, (int) $isRecurring, $recurrenceOf !== false ? (int) $recurrenceOf : null]);
+  $insertIssue->execute([$user['id'], $title, $description, $category, $department, $severity, 'pending', $latitude, $longitude, $geohash, $address, $user['ward_id'], $ai['confidence'], (int) $ai['is_manipulated'], (int) $isRecurring, $recurrenceOf !== false ? (int) $recurrenceOf : null]);
   $issueId = (int) $db->lastInsertId();
   $db->prepare(
     'INSERT INTO issue_reports
@@ -166,10 +180,24 @@ try {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
   )->execute([$issueId, $reportId, $imageId, $category, $severity, $ai['confidence'], (int) $ai['is_manipulated'], $ai['model_version'], $rawAI]);
 
+  $priorityAssessment = calculatePriorityAssessment(
+    $db,
+    $issueId,
+    (float) $latitude,
+    (float) $longitude,
+    $category,
+    $severity,
+    1,
+    0,
+    null,
+    $isRecurring
+  );
+  $db->prepare('UPDATE issues SET priority_score = ? WHERE id = ?')->execute([$priorityAssessment['score'], $issueId]);
+
   $db->commit();
   $message = 'Report submitted and added to the community feed.';
   setToast($message, 'success');
-  jsonResponse(201, $message, ['issue_id' => $issueId, 'grouped' => false, 'category' => $category, 'ai' => $ai]);
+  jsonResponse(201, $message, ['issue_id' => $issueId, 'grouped' => false, 'category' => $category, 'priority' => $priorityAssessment, 'ai' => $ai]);
 } catch (Throwable $exception) {
   if ($db->inTransaction()) $db->rollBack();
   if (isset($image['absolute_path']) && is_file($image['absolute_path'])) unlink($image['absolute_path']);

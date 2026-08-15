@@ -109,6 +109,7 @@ try {
     'category_trends' => $categoryTrend,
     'ward_resolution' => $wardRates,
     'priority_formula' => civicPriorityFormula(),
+    'priority_thresholds' => civicPriorityConfig(),
   ]);
 } catch (Throwable $exception) {
   error_log('Analytics query failed: ' . $exception->getMessage());

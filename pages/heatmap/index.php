@@ -7,10 +7,8 @@ extract($bootstrapData);
 
 $viewer = sessionUser();
 $viewerRole = (string) ($viewer['role'] ?? '');
-$dashboardPath = $viewerRole === 'admin'
-  ? '../admin/admin-dashboard.php'
-  : ($viewerRole === 'worker' ? '../worker/assignments.php' : '../citizen/citizen-dashboard.php');
-$heatmapEndpoint = '../../api/stats/heatmap.php';
+$dashboardPath = civicDashboardForRole($viewerRole);
+$heatmapEndpoint = civicApi('stats/heatmap.php');
 $cityStats = getIssueStats($db);
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 ?>
@@ -28,7 +26,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="../../assets/css/civic-ui.css">
+  <link rel="stylesheet" href="<?= $e(civicAsset('css/civic-ui.css')) ?>">
   <style>
     :root {
       --pulse-bg: #08111b;
@@ -125,15 +123,15 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
 <body>
   <div class="pulse-shell">
     <nav class="pulse-nav" aria-label="City pulse navigation">
-      <a class="pulse-brand" href="../../"><span class="pulse-brand-mark"><i class="fas fa-location-crosshairs"></i></span><span>CivicConnect / City pulse</span></a>
-      <div class="pulse-nav-links"><a href="../citizen/public-feed.php"><i class="fas fa-layer-group me-1"></i>Community feed</a><a href="index.php" class="active"><i class="fas fa-map-location-dot me-1"></i>Heatmap</a></div>
+      <a class="pulse-brand" href="<?= $e(civicRoute('home')) ?>"><span class="pulse-brand-mark"><i class="fas fa-location-crosshairs"></i></span><span>CivicConnect / City pulse</span></a>
+      <div class="pulse-nav-links"><a href="<?= $e(civicRoute('feed')) ?>"><i class="fas fa-layer-group me-1"></i>Community feed</a><a href="<?= $e(civicRoute('pulse')) ?>" class="active"><i class="fas fa-map-location-dot me-1"></i>Heatmap</a></div>
       <div class="pulse-nav-actions">
         <?php if ($viewer): ?>
           <a class="btn btn-sm" href="<?= $e($dashboardPath) ?>"><i class="fas fa-th-large me-1"></i><span>Dashboard</span></a>
-          <?php if ($viewerRole === 'citizen'): ?><a class="btn btn-sm btn-primary" href="../report/"><i class="fas fa-plus me-1"></i><span>Report</span></a><?php endif; ?>
+          <?php if ($viewerRole === 'citizen'): ?><a class="btn btn-sm btn-primary" href="<?= $e(civicRoute('report')) ?>"><i class="fas fa-plus me-1"></i><span>Report</span></a><?php endif; ?>
         <?php else: ?>
-          <a class="btn btn-sm" href="../login/"><i class="fas fa-sign-in-alt me-1"></i><span>Sign in</span></a>
-          <a class="btn btn-sm btn-primary" href="../register/"><i class="fas fa-user-plus me-1"></i><span>Join</span></a>
+          <a class="btn btn-sm" href="<?= $e(civicRoute('login')) ?>"><i class="fas fa-sign-in-alt me-1"></i><span>Sign in</span></a>
+          <a class="btn btn-sm btn-primary" href="<?= $e(civicRoute('register')) ?>"><i class="fas fa-user-plus me-1"></i><span>Join</span></a>
         <?php endif; ?>
       </div>
     </nav>
@@ -171,7 +169,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
         </div>
         <div class="cluster-heading"><h3>Most active clusters</h3><span id="clusterCount">0 visible</span></div>
         <div class="cluster-list" id="clusterList"><div class="empty-clusters">Waiting for the map signal…</div></div>
-        <div class="panel-footer"><span><i class="fas fa-circle-info me-1"></i>Clusters group nearby reports.</span><a href="../citizen/public-feed.php">Browse feed <i class="fas fa-arrow-right ms-1"></i></a></div>
+        <div class="panel-footer"><span><i class="fas fa-circle-info me-1"></i>Clusters group nearby reports.</span><a href="<?= $e(civicRoute('feed')) ?>">Browse feed <i class="fas fa-arrow-right ms-1"></i></a></div>
       </aside>
     </main>
   </div>
@@ -179,6 +177,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script>
     const heatmapEndpoint = <?= json_encode($heatmapEndpoint, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const issueDetailUrl = <?= json_encode(civicRoute('issue_detail'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const mapStyle = {version: 8, sources: {carto: {type: 'raster', tiles: ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', 'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', 'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OpenStreetMap contributors &copy; CARTO'}}, layers: [{id: 'carto', type: 'raster', source: 'carto'}]};
     const state = {all: [], visible: [], glow: true};
     const categoryLabels = {pothole: 'Pothole', garbage: 'Garbage', streetlight: 'Streetlight', waterlogging: 'Waterlogging', road_damage: 'Road damage', encroachment: 'Encroachment', graffiti: 'Graffiti', open_drain: 'Open drain', fallen_tree: 'Fallen tree', other: 'Other'};
@@ -237,7 +236,7 @@ $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_Q
     }
 
     function popupFor(point) {
-      const liveIssueLink = /^\d+$/.test(point.id) ? `<a href="../citizen/public-feed.php?issue=${encodeURIComponent(point.id)}">Open in community feed <i class="fas fa-arrow-right ms-1"></i></a>` : '';
+      const liveIssueLink = /^\d+$/.test(point.id) ? `<a href="${issueDetailUrl}?id=${encodeURIComponent(point.id)}">Open issue details <i class="fas fa-arrow-right ms-1"></i></a>` : '';
       return `<div class="map-popup"><div class="map-popup-kicker">${escapeHtml(labelFor(point.category))} · ${escapeHtml(point.status.replace(/_/g, ' '))}</div><h3>${escapeHtml(point.title)}</h3><p><i class="fas fa-location-dot me-1"></i>${escapeHtml(point.address)}</p><p><strong>${formatCount(point.count)} reports</strong> · ${formatCount(point.upvotes)} upvotes</p>${liveIssueLink}</div>`;
     }
 

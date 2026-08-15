@@ -20,10 +20,22 @@ class AIServiceException extends RuntimeException
 {
 }
 
-function callAIService(string $relativePath, ?string $submittedCategory = null, ?float $latitude = null, ?float $longitude = null): array
+function callAIService(
+  string $relativePath,
+  ?string $submittedCategory = null,
+  ?float $latitude = null,
+  ?float $longitude = null,
+  bool $includePreview = false
+): array
 {
-  $endpoint = 'http://127.0.0.1:8000/analyze';
+  // Keep the model on the local machine by default, but allow a deployed PHP
+  // host to reach it through an authenticated/private tunnel when required.
+  $endpoint = rtrim((string) (getenv('CIVICCONNECT_AI_URL') ?: 'http://127.0.0.1:8000'), '/') . '/analyze';
+  $aiToken = trim((string) (getenv('CIVICCONNECT_AI_TOKEN') ?: ''));
   $payloadData = ['filepath' => $relativePath];
+  if ($includePreview) {
+    $payloadData['include_preview'] = true;
+  }
   if ($submittedCategory !== null && $submittedCategory !== '') {
     $payloadData['submitted_category'] = normalizedCategory($submittedCategory);
   }
@@ -42,9 +54,11 @@ function callAIService(string $relativePath, ?string $submittedCategory = null, 
 
   if (function_exists('curl_init')) {
     $ch = curl_init($endpoint);
+    $headers = ['Content-Type: application/json', 'Accept: application/json'];
+    if ($aiToken !== '') $headers[] = 'Authorization: Bearer ' . $aiToken;
     curl_setopt_array($ch, [
       CURLOPT_POST => true, CURLOPT_POSTFIELDS => $payload,
-      CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json'],
+      CURLOPT_HTTPHEADER => $headers,
       CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 2, CURLOPT_TIMEOUT => 15,
     ]);
     $response = curl_exec($ch);
@@ -52,9 +66,11 @@ function callAIService(string $relativePath, ?string $submittedCategory = null, 
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
   } elseif (filter_var(ini_get('allow_url_fopen'), FILTER_VALIDATE_BOOLEAN)) {
+    $headerLines = "Content-Type: application/json\r\nAccept: application/json\r\n";
+    if ($aiToken !== '') $headerLines .= 'Authorization: Bearer ' . $aiToken . "\r\n";
     $httpHeaders = [
       'method' => 'POST',
-      'header' => "Content-Type: application/json\r\nAccept: application/json\r\n",
+      'header' => $headerLines,
       'content' => $payload,
       'timeout' => 15,
       'ignore_errors' => true,
@@ -91,8 +107,34 @@ function callAIService(string $relativePath, ?string $submittedCategory = null, 
 
   $detectedCategory = normalizedCategory($decoded['category']);
   $department = normalizedDepartment($decoded['department'] ?? departmentForCategory($detectedCategory));
+  $detections = [];
+  foreach (($decoded['detections'] ?? []) as $detection) {
+    if (!is_array($detection)) {
+      continue;
+    }
+    $bbox = $detection['bbox'] ?? [];
+    if (!is_array($bbox) || count($bbox) !== 4) {
+      continue;
+    }
+    $detections[] = [
+      'class' => substr(trim((string) ($detection['class'] ?? 'unknown')), 0, 100),
+      'category' => normalizedCategory($detection['category'] ?? $detection['class'] ?? 'unknown'),
+      'confidence' => max(0.0, min(1.0, (float) ($detection['confidence'] ?? 0))),
+      'bbox' => array_map(static fn($value): float => round((float) $value, 2), array_values($bbox)),
+    ];
+  }
 
-  return [
+  // Annotated previews are for the immediate UI response only. The final
+  // report stores the structured detection data without duplicating the
+  // base64 image in issue_images.ai_raw_output or issue_ai_analyses.raw_output.
+  $raw = $decoded;
+  unset($raw['annotated_image'], $raw['preview_width'], $raw['preview_height']);
+  $annotatedImage = $decoded['annotated_image'] ?? null;
+  if (!is_string($annotatedImage) || !preg_match('/^data:image\/(?:jpeg|png|webp);base64,/', $annotatedImage) || strlen($annotatedImage) > 16 * 1024 * 1024) {
+    $annotatedImage = null;
+  }
+
+  $result = [
     'category' => $detectedCategory,
     'severity' => max(1, min(5, (int) $decoded['severity'])),
     'confidence' => max(0.0, min(1.0, (float) $decoded['confidence'])),
@@ -101,6 +143,19 @@ function callAIService(string $relativePath, ?string $submittedCategory = null, 
     'low_confidence' => !empty($decoded['low_confidence']) || (float) $decoded['confidence'] < 0.45,
     'manipulation' => is_array($decoded['manipulation'] ?? null) ? $decoded['manipulation'] : [],
     'model_version' => (string) ($decoded['model_version'] ?? 'civicconnect-ai-service'),
-    'raw' => $decoded,
+    'detections' => $detections,
+    'detection_count' => count($detections),
+    'bbox' => is_array($decoded['bbox'] ?? null) ? array_map(static fn($value): float => round((float) $value, 2), array_values($decoded['bbox'])) : [],
+    'image_width' => max(0, (int) ($decoded['image_width'] ?? 0)),
+    'image_height' => max(0, (int) ($decoded['image_height'] ?? 0)),
+    'raw' => $raw,
   ];
+
+  if ($includePreview) {
+    $result['annotated_image'] = $annotatedImage;
+    $result['preview_width'] = max(0, (int) ($decoded['preview_width'] ?? 0));
+    $result['preview_height'] = max(0, (int) ($decoded['preview_height'] ?? 0));
+  }
+
+  return $result;
 }

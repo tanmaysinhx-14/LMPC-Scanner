@@ -56,7 +56,8 @@ try {
     $relativePath,
     normalizedCategory($_POST['issueCategory'] ?? null),
     $validLatitude && $validLongitude ? (float) $latitude : null,
-    $validLatitude && $validLongitude ? (float) $longitude : null
+    $validLatitude && $validLongitude ? (float) $longitude : null,
+    true
   );
 } catch (AIServiceException $exception) {
   $errorStatus = 503;

@@ -94,13 +94,13 @@
 ?>
 
 <?php // Header (contains Unified Page Meta-Data and CSS imports)
-  require_once __DIR__ . '/../../components/header.php';
+  require_once CIVICCONNECT_ROOT . '/components/header.php';
 ?>
 
 <body class="d-flex flex-column min-vh-100">
   <nav class="navbar navbar-expand-lg sticky-top bg-body border-bottom shadow-sm">
     <div class="container">
-      <a href="../../index.php" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary">
+      <a href="<?= htmlspecialchars(civicRoute('home'), ENT_QUOTES, 'UTF-8') ?>" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary">
         <span class="d-inline-flex align-items-center justify-content-center rounded-3 bg-primary text-white" style="width: 36px; height: 36px;">
           <i class="fas fa-city"></i>
         </span>
@@ -110,7 +110,7 @@
         <button id="themeToggleBtn" class="btn btn-link text-body p-0 border-0" aria-label="Toggle theme">
           <i class="fas fa-moon fs-5" id="themeIcon"></i>
         </button>
-        <a href="../login/index.php" class="btn btn-secondary rounded-pill px-4">
+        <a href="<?= htmlspecialchars(civicRoute('login'), ENT_QUOTES, 'UTF-8') ?>" class="btn btn-secondary rounded-pill px-4">
           <i class="fas fa-sign-in-alt me-2"></i> Sign In
         </a>
       </div>
@@ -347,7 +347,7 @@
                 <div class="text-center pt-4">
                   <p class="text-secondary mb-0">
                     Already have an account?
-                    <a href="../login/index.php" class="text-primary fw-semibold text-decoration-none">
+                    <a href="<?= htmlspecialchars(civicRoute('login'), ENT_QUOTES, 'UTF-8') ?>" class="text-primary fw-semibold text-decoration-none">
                       Sign in here <i class="fas fa-arrow-right ms-1"></i>
                     </a>
                   </p>
@@ -363,10 +363,10 @@
 
   <?php // Contains Bottom-Credits and JS imports
     require_once __DIR__ . '/../../components/bottom-credits.php';
-    require_once __DIR__ . '/../../components/footer.php';
+    require_once CIVICCONNECT_ROOT . '/components/footer.php';
   ?>
 
-  <script type="text/javascript" src="../../assets/js/index.js"></script>
+  <script type="text/javascript" src="<?= htmlspecialchars(civicAsset('js/index.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
   <script type="text/javascript"> // Registrations Exclusive JS
     // Password Visibility Toggle
     function togglePassword() {

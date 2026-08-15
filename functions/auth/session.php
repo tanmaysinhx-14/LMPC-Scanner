@@ -347,6 +347,10 @@ function isValidCsrfToken(?string $token): bool
 
 function requireCsrfToken(bool $json = false): void
 {
+  if (function_exists('mobileSessionAuthenticated') && mobileSessionAuthenticated()) {
+    return;
+  }
+
   $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
   if (isValidCsrfToken(is_string($token) ? $token : null)) {
     return;
@@ -362,6 +366,15 @@ function requireCsrfToken(bool $json = false): void
 
 function requireAuthentication(?PDO $db = null, array $allowedRoles = []): array
 {
+  if ($db && function_exists('mobileBearerToken') && mobileBearerToken() !== null
+    && (!function_exists('mobileSessionAuthenticated') || !mobileSessionAuthenticated())) {
+    if (function_exists('jsonResponse')) {
+      jsonResponse(401, 'The mobile access token is invalid or expired.');
+    }
+    http_response_code(401);
+    exit('Authentication required.');
+  }
+
   if ($db) {
     restoreRememberedLogin($db);
     refreshSessionUser($db);

@@ -1,37 +1,45 @@
-"""FastAPI service for CivicConnect image classification."""
+"""FastAPI service for CivicConnect object detection."""
 
 from __future__ import annotations
 
+import base64
 from contextlib import asynccontextmanager
+from io import BytesIO
+import hmac
+import math
+import os
 from pathlib import Path
 from threading import Lock
-import math
 from typing import Optional, Union
 
 import torch
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
+from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, Field
 from ultralytics import YOLO
 
 try:
-    from .class_map import CIVIC_CLASSES
     from .image_check import check_manipulation
 except ImportError:
-    from class_map import CIVIC_CLASSES
     from image_check import check_manipulation
 
 
 # This file is in <project-root>/ai-service/, so the parent directory is the
 # project root used by the PHP backend for relative upload paths.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_PATH = PROJECT_ROOT / "runs" / "civicconnect_cls" / "weights" / "best.pt"
-FALLBACK_MODEL_PATH = PROJECT_ROOT / "yolov8n-cls.pt"
+DEFAULT_MODEL_PATH = PROJECT_ROOT / "civic-dataset" / "runs" / "detect" / "train" / "weights" / "best.pt"
+PREVIOUS_MODEL_PATH = PROJECT_ROOT / "civic-dataset" / "runs" / "detect" / "train-4" / "weights" / "best.pt"
+DEPLOYMENT_MODEL_PATH = PROJECT_ROOT / "ai-service" / "models" / "best.pt"
+MODEL_PATH = DEFAULT_MODEL_PATH
+AI_SHARED_TOKEN = os.getenv("CIVICCONNECT_AI_TOKEN", "").strip()
 
-# Classification models normally use 224x224 input images. Batch size 1 and
-# half precision on CUDA keep peak VRAM usage low on a 4 GB GPU.
-IMAGE_SIZE = 224
+# Detection models are trained at 640px in civic-dataset/train.py. Keeping the
+# output preview bounded prevents a large phone photo from becoming a huge
+# base64 response while preserving enough detail for a jury demo.
+IMAGE_SIZE = 640
 INFERENCE_BATCH_SIZE = 1
-CONFIDENCE_THRESHOLD = 0.45
+MAX_PREVIEW_DIMENSION = 1600
+CONFIDENCE_THRESHOLD = 0.35
 CATEGORY_DEFAULTS = {
     "pothole": {"category": "pothole", "severity_base": 3, "department": "public_works"},
     "garbage": {"category": "garbage", "severity_base": 2, "department": "sanitation"},
@@ -44,6 +52,11 @@ CATEGORY_DEFAULTS = {
     "fallen_tree": {"category": "fallen_tree", "severity_base": 3, "department": "municipal"},
     "other": {"category": "other", "severity_base": 1, "department": "municipal"},
 }
+PREVIEW_COLORS = {
+    "pothole": (220, 38, 38),
+    "garbage": (217, 119, 6),
+    "unknown": (79, 70, 229),
+}
 
 
 class AnalyzeRequest(BaseModel):
@@ -55,6 +68,7 @@ class AnalyzeRequest(BaseModel):
     submitted_category: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    include_preview: bool = False
 
 
 class AnalyzeSuccess(BaseModel):
@@ -67,6 +81,14 @@ class AnalyzeSuccess(BaseModel):
     low_confidence: bool
     manipulation: dict
     model_version: str
+    detections: list[dict] = Field(default_factory=list)
+    detection_count: int = 0
+    bbox: list[float] = Field(default_factory=list)
+    image_width: int = 0
+    image_height: int = 0
+    annotated_image: Optional[str] = None
+    preview_width: Optional[int] = None
+    preview_height: Optional[int] = None
 
 
 class AnalyzeFailure(BaseModel):
@@ -83,21 +105,42 @@ _model_version = "civicconnect-ai-unavailable"
 _inference_lock = Lock()
 
 
+def _model_candidates() -> list[Path]:
+    configured = os.getenv("CIVICCONNECT_AI_MODEL", "").strip()
+    candidates = []
+    if configured:
+        configured_path = Path(configured)
+        candidates.append(configured_path if configured_path.is_absolute() else PROJECT_ROOT / configured_path)
+    candidates.extend([DEFAULT_MODEL_PATH, PREVIOUS_MODEL_PATH, DEPLOYMENT_MODEL_PATH])
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved not in seen:
+            unique.append(resolved)
+            seen.add(resolved)
+    return unique
+
+
 def _load_model() -> None:
-    """Load the classifier once when the application starts."""
+    """Load the trained detection model once when the application starts."""
 
     global _model, _model_load_error, _model_version
 
-    model_candidates = [MODEL_PATH, FALLBACK_MODEL_PATH]
     errors = []
-    for candidate in model_candidates:
+    for candidate in _model_candidates():
         if not candidate.is_file():
             errors.append(f"Model file not found: {candidate}")
             continue
         try:
-            _model = YOLO(str(candidate))
+            loaded_model = YOLO(str(candidate))
+            if getattr(loaded_model, "task", None) != "detect":
+                raise RuntimeError("the checkpoint is not a detection model")
+            _model = loaded_model
             _model_load_error = None
-            _model_version = f"civicconnect-yolov8-classifier:{candidate.name}"
+            model_run = candidate.parent.parent.name
+            _model_version = f"civicconnect-ultralytics-detector:{model_run}/{candidate.name}"
             return
         except Exception as exc:
             errors.append(f"Unable to load {candidate}: {exc}")
@@ -115,7 +158,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="CivicConnect AI Service",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -140,31 +183,32 @@ def _class_name(names: object, class_index: int) -> str:
     """Get a class name from Ultralytics' dict or list representation."""
 
     if isinstance(names, dict):
+        return str(names.get(class_index, names.get(str(class_index), "unknown")))
+    if isinstance(names, (list, tuple)) and 0 <= class_index < len(names):
         return str(names[class_index])
-    if isinstance(names, (list, tuple)):
-        return str(names[class_index])
-    raise RuntimeError("The loaded model has no valid class names")
+    return "unknown"
 
 
-def _class_metadata(category_name: str) -> dict:
-    normalized = category_name.strip().lower().replace("_", " ")
-    for metadata in CIVIC_CLASSES.values():
-        if normalized in {
-            str(metadata.get("name", "")).lower().replace("_", " "),
-            str(metadata.get("category", "")).lower().replace("_", " "),
-        }:
-            return metadata
-    return {"category": "unknown", "severity_base": 1, "department": "municipal"}
+def _category_for_model_name(name: str) -> str:
+    """Map Roboflow labels to CivicConnect's database categories."""
+
+    normalized = " ".join(name.strip().lower().replace("_", " ").replace("-", " ").split())
+    aliases = {
+        "pothole": "pothole",
+        "potholes": "pothole",
+        "pothole detection": "pothole",
+        "trash": "garbage",
+        "garbage": "garbage",
+        "garbage dump": "garbage",
+        "waste": "garbage",
+        "rubbish": "garbage",
+    }
+    return aliases.get(normalized, normalized.replace(" ", "_") if normalized in CATEGORY_DEFAULTS else "unknown")
 
 
-def _submitted_category(value: Optional[str]) -> str:
-    normalized = (value or "").strip().lower().replace(" ", "_")
-    allowed = set(CATEGORY_DEFAULTS)
-    return normalized if normalized in allowed else "unknown"
-
-
-def _severity(base: int, confidence: float) -> int:
-    return max(1, min(5, int(round(float(base) * max(0.0, min(1.0, confidence))))))
+def _severity(category_name: str, confidence: float) -> int:
+    metadata = CATEGORY_DEFAULTS.get(category_name, CATEGORY_DEFAULTS["other"])
+    return max(1, min(5, int(round(float(metadata["severity_base"]) * confidence))))
 
 
 def _gps_mismatch(manipulation: dict, request: AnalyzeRequest) -> dict:
@@ -197,17 +241,69 @@ def _distance_metres(lat_a: float, lon_a: float, lat_b: float, lon_b: float) -> 
     return radius * 2 * math.atan2(math.sqrt(first + second), math.sqrt(1 - first - second))
 
 
-def _run_inference(image_path: Path) -> tuple[str, float]:
-    """Run one memory-conscious classification inference."""
+def _font(size: int) -> ImageFont.ImageFont:
+    for font_name in ("arial.ttf", "DejaVuSans.ttf"):
+        try:
+            return ImageFont.truetype(font_name, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _encode_annotated_preview(image: Image.Image, detections: list[dict]) -> tuple[str, int, int]:
+    """Draw boxes and labels, then return a bounded JPEG data URL."""
+
+    annotated = image.convert("RGB").copy()
+    draw = ImageDraw.Draw(annotated)
+    width, height = annotated.size
+    line_width = max(3, round(max(width, height) / 320))
+    font = _font(max(16, round(max(width, height) / 70)))
+
+    for detection in detections:
+        x1, y1, x2, y2 = detection["bbox"]
+        category = detection["category"]
+        color = PREVIEW_COLORS.get(category, PREVIEW_COLORS["unknown"])
+        draw.rectangle((x1, y1, x2, y2), outline=color, width=line_width)
+        label = f"{category.replace('_', ' ').title()} {detection['confidence']:.0%}"
+        text_box = draw.textbbox((0, 0), label, font=font)
+        text_width = text_box[2] - text_box[0]
+        text_height = text_box[3] - text_box[1]
+        label_y = max(0, y1 - text_height - line_width * 2)
+        draw.rectangle(
+            (x1, label_y, x1 + text_width + line_width * 4, label_y + text_height + line_width * 2),
+            fill=color,
+        )
+        draw.text((x1 + line_width * 2, label_y + line_width), label, fill="white", font=font)
+
+    if not detections:
+        label = "No confident pothole or garbage detections"
+        banner_height = max(36, round(height / 12))
+        draw.rectangle((0, 0, width, banner_height), fill=(31, 41, 55))
+        draw.text((line_width * 2, line_width * 2), label, fill="white", font=font)
+
+    preview = annotated.copy()
+    preview.thumbnail((MAX_PREVIEW_DIMENSION, MAX_PREVIEW_DIMENSION), Image.Resampling.LANCZOS)
+    output = BytesIO()
+    preview.save(output, format="JPEG", quality=88, optimize=True)
+    encoded = base64.b64encode(output.getvalue()).decode("ascii")
+    return f"data:image/jpeg;base64,{encoded}", preview.width, preview.height
+
+
+def _run_inference(image_path: Path, include_preview: bool) -> dict:
+    """Run one memory-conscious object-detection inference."""
 
     if _model is None:
-        raise RuntimeError(_model_load_error or "Model is not loaded")
+        raise RuntimeError(_model_load_error or "The detection model is not loaded")
 
     use_cuda = torch.cuda.is_available()
     device: Union[int, str] = 0 if use_cuda else "cpu"
 
+    with Image.open(image_path) as source_image:
+        image = source_image.convert("RGB")
+        image_width, image_height = image.size
+
     # The lock prevents concurrent requests from duplicating model activation
-    # memory on the 4 GB GPU and keeps model access thread-safe.
+    # memory on a small GPU and keeps model access thread-safe.
     with _inference_lock:
         results = _model.predict(
             source=str(image_path),
@@ -215,38 +311,98 @@ def _run_inference(image_path: Path) -> tuple[str, float]:
             batch=INFERENCE_BATCH_SIZE,
             device=device,
             half=use_cuda,
+            conf=CONFIDENCE_THRESHOLD,
             stream=False,
             verbose=False,
         )
 
-    if not results or results[0].probs is None:
-        raise RuntimeError("The model did not return classification probabilities")
+    if not results:
+        raise RuntimeError("The model did not return an inference result")
 
-    probabilities = results[0].probs
-    class_index = int(probabilities.top1)
-    confidence = float(probabilities.top1conf)
-    category = _class_name(results[0].names, class_index)
+    result = results[0]
+    boxes = getattr(result, "boxes", None)
+    detections: list[dict] = []
+    if boxes is not None:
+        xyxy = boxes.xyxy.detach().cpu().tolist()
+        confidences = boxes.conf.detach().cpu().tolist()
+        class_ids = boxes.cls.detach().cpu().tolist()
+        for bbox, confidence, class_id in zip(xyxy, confidences, class_ids):
+            confidence = float(confidence)
+            class_index = int(class_id)
+            raw_name = _class_name(result.names, class_index)
+            category = _category_for_model_name(raw_name)
+            clipped_bbox = [
+                round(max(0.0, min(float(bbox[0]), image_width)), 2),
+                round(max(0.0, min(float(bbox[1]), image_height)), 2),
+                round(max(0.0, min(float(bbox[2]), image_width)), 2),
+                round(max(0.0, min(float(bbox[3]), image_height)), 2),
+            ]
+            detections.append(
+                {
+                    "class": raw_name,
+                    "category": category,
+                    "confidence": round(confidence, 4),
+                    "bbox": clipped_bbox,
+                    "class_id": class_index,
+                }
+            )
 
-    return category, round(confidence, 4)
+    detections.sort(key=lambda detection: detection["confidence"], reverse=True)
+    primary = detections[0] if detections else None
+    category = primary["category"] if primary else "unknown"
+    confidence = float(primary["confidence"]) if primary else 0.0
+    bbox = primary["bbox"] if primary else []
+    preview = None
+    preview_width = None
+    preview_height = None
+    if include_preview:
+        preview, preview_width, preview_height = _encode_annotated_preview(image, detections)
+
+    return {
+        "category": category,
+        "confidence": round(confidence, 4),
+        "severity": _severity(category, confidence) if primary else 1,
+        "low_confidence": not bool(primary) or confidence < 0.45,
+        "detections": detections,
+        "detection_count": len(detections),
+        "bbox": bbox,
+        "image_width": image_width,
+        "image_height": image_height,
+        "annotated_image": preview,
+        "preview_width": preview_width,
+        "preview_height": preview_height,
+    }
+
+
+@app.get("/health")
+def health() -> dict:
+    """Expose model readiness without exposing the local filesystem path."""
+
+    return {
+        "ok": _model is not None,
+        "model_version": _model_version,
+        "task": "detect",
+        "error": _model_load_error,
+    }
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
-def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
-    """Classify an uploaded image and return the PHP-compatible response."""
+def analyze(request: AnalyzeRequest, authorization: Optional[str] = Header(default=None)) -> AnalyzeResponse:
+    """Detect civic issues and optionally return an annotated image preview."""
+
+    if AI_SHARED_TOKEN:
+        supplied = (authorization or "").removeprefix("Bearer ").strip()
+        if not supplied or not hmac.compare_digest(supplied, AI_SHARED_TOKEN):
+            raise HTTPException(status_code=401, detail="AI service authentication required")
 
     try:
         image_path = _resolve_image_path(request.filepath)
         if not image_path.is_file():
             return AnalyzeFailure(success=False, error="Image file not found")
 
-        predicted_name, confidence = _run_inference(image_path)
-        metadata = _class_metadata(predicted_name)
-        low_confidence = confidence < CONFIDENCE_THRESHOLD
-        category = _submitted_category(request.submitted_category) if low_confidence else str(metadata.get("category", "unknown"))
-        if category == "unknown":
-            category = "unknown"
-        if low_confidence and category != "unknown":
-            metadata = CATEGORY_DEFAULTS.get(category, metadata)
+        inference = _run_inference(image_path, request.include_preview)
+        category = str(inference["category"])
+        metadata = CATEGORY_DEFAULTS.get(category, CATEGORY_DEFAULTS["other"])
         try:
             manipulation = _gps_mismatch(check_manipulation(str(image_path)), request)
         except Exception as manipulation_error:
@@ -265,13 +421,21 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
         return AnalyzeSuccess(
             success=True,
             category=category,
-            confidence=confidence,
-            severity=_severity(int(metadata.get("severity_base", 1)), confidence),
+            confidence=inference["confidence"],
+            severity=inference["severity"],
             is_manipulated=bool(manipulation.get("flagged") or manipulation.get("gps_mismatch")),
             department=str(metadata.get("department", "municipal")),
-            low_confidence=low_confidence,
+            low_confidence=inference["low_confidence"],
             manipulation=manipulation,
             model_version=_model_version,
+            detections=inference["detections"],
+            detection_count=inference["detection_count"],
+            bbox=inference["bbox"],
+            image_width=inference["image_width"],
+            image_height=inference["image_height"],
+            annotated_image=inference["annotated_image"],
+            preview_width=inference["preview_width"],
+            preview_height=inference["preview_height"],
         )
     except Exception as exc:
         return AnalyzeFailure(success=False, error=str(exc))

@@ -9,7 +9,7 @@
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
-SET time_zone = "+00:00";
+SET time_zone = "+05:30";
 
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -196,6 +196,43 @@ CREATE TABLE `remember_tokens` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `mobile_access_tokens`
+--
+
+CREATE TABLE `mobile_access_tokens` (
+  `id` bigint(20) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `token_hash` char(64) NOT NULL,
+  `expires_at` datetime NOT NULL,
+  `device_name` varchar(120) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `last_used_at` timestamp NULL DEFAULT NULL,
+  `revoked_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `mobile_refresh_tokens`
+--
+
+CREATE TABLE `mobile_refresh_tokens` (
+  `id` bigint(20) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `family_id` char(32) NOT NULL,
+  `token_hash` char(64) NOT NULL,
+  `device_id` varchar(120) DEFAULT NULL,
+  `expires_at` datetime NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `last_used_at` timestamp NULL DEFAULT NULL,
+  `rotated_at` timestamp NULL DEFAULT NULL,
+  `revoked_at` timestamp NULL DEFAULT NULL,
+  `replaced_by_id` bigint(20) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `status_history`
 --
 
@@ -246,72 +283,53 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
--- Prototype demo accounts:
--- Citizen: mail.citizen@gmail.com / Citizen@123
--- Worker:  mail.worker@gmail.com  / Worker@123
--- Admin:   mail.admin@gmail.com   / Admin@123
+-- Six demo accounts per role for multi-device demonstrations.
+-- Citizens use Citizen@123, workers use Worker@123, and administrators use Admin@123.
 INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `department`, `ward_id`, `city`, `phone`, `is_active`, `created_at`) VALUES
-(1, 'First Citizen', 'mail.citizen@gmail.com', '$2y$12$KjFZiZrb7bOAmyv6g1ifH.9WWfkXUx569OtjdEf4e/Kjz4rT2qDwS', 'citizen', NULL, NULL, 'Chennai', '+91987654321', 1, '2026-08-06 17:07:39'),
-(2, 'First Worker', 'mail.worker@gmail.com', '$2y$12$bMt.UrnA7XwiSCILkuFsn.1HI6XdWQ2a0qk.zV.ijtIeZD4lf5U/m', 'worker', 'public_works', NULL, 'Chennai', '+91987654322', 1, '2026-08-08 09:00:00'),
-(3, 'First Admin', 'mail.admin@gmail.com', '$2y$12$MEeU9WBZ7na3NcKFvnwppufqRGng1CWbYCN0R/nO4BSVyUGrvhhd6', 'admin', NULL, NULL, 'Chennai', '+91987654323', 1, '2026-08-08 09:00:00');
+(1, 'Citizen One', 'citizen.one@civicconnect.test', '$2y$12$DYH2fS2TXrHSQkLVD/ceOOnbmRwb/eSleeme/eqPW4jcXBsgglNUe', 'citizen', NULL, 1, 'Chennai', '+91987654321', 1, '2026-08-14 09:00:00'),
+(2, 'Citizen Two', 'citizen.two@civicconnect.test', '$2y$12$DYH2fS2TXrHSQkLVD/ceOOnbmRwb/eSleeme/eqPW4jcXBsgglNUe', 'citizen', NULL, 1, 'Chennai', '+91987654322', 1, '2026-08-14 09:01:00'),
+(3, 'Citizen Three', 'citizen.three@civicconnect.test', '$2y$12$DYH2fS2TXrHSQkLVD/ceOOnbmRwb/eSleeme/eqPW4jcXBsgglNUe', 'citizen', NULL, 2, 'Chennai', '+91987654323', 1, '2026-08-14 09:02:00'),
+(4, 'Citizen Four', 'citizen.four@civicconnect.test', '$2y$12$DYH2fS2TXrHSQkLVD/ceOOnbmRwb/eSleeme/eqPW4jcXBsgglNUe', 'citizen', NULL, 2, 'Chennai', '+91987654324', 1, '2026-08-14 09:03:00'),
+(5, 'Citizen Five', 'citizen.five@civicconnect.test', '$2y$12$DYH2fS2TXrHSQkLVD/ceOOnbmRwb/eSleeme/eqPW4jcXBsgglNUe', 'citizen', NULL, 3, 'Chennai', '+91987654325', 1, '2026-08-14 09:04:00'),
+(6, 'Citizen Six', 'citizen.six@civicconnect.test', '$2y$12$DYH2fS2TXrHSQkLVD/ceOOnbmRwb/eSleeme/eqPW4jcXBsgglNUe', 'citizen', NULL, 3, 'Chennai', '+91987654326', 1, '2026-08-14 09:05:00'),
+(7, 'Worker One', 'worker.one@civicconnect.test', '$2y$12$SrdPb1.zIhkfDN1Nu/ymD..NvZeRpeezhCLSkKx3tHJh2aLsH.RC.', 'worker', 'public_works', 1, 'Chennai', '+91987654421', 1, '2026-08-14 09:10:00'),
+(8, 'Worker Two', 'worker.two@civicconnect.test', '$2y$12$SrdPb1.zIhkfDN1Nu/ymD..NvZeRpeezhCLSkKx3tHJh2aLsH.RC.', 'worker', 'public_works', 1, 'Chennai', '+91987654422', 1, '2026-08-14 09:11:00'),
+(9, 'Worker Three', 'worker.three@civicconnect.test', '$2y$12$SrdPb1.zIhkfDN1Nu/ymD..NvZeRpeezhCLSkKx3tHJh2aLsH.RC.', 'worker', 'sanitation', 2, 'Chennai', '+91987654423', 1, '2026-08-14 09:12:00'),
+(10, 'Worker Four', 'worker.four@civicconnect.test', '$2y$12$SrdPb1.zIhkfDN1Nu/ymD..NvZeRpeezhCLSkKx3tHJh2aLsH.RC.', 'worker', 'drainage', 2, 'Chennai', '+91987654424', 1, '2026-08-14 09:13:00'),
+(11, 'Worker Five', 'worker.five@civicconnect.test', '$2y$12$SrdPb1.zIhkfDN1Nu/ymD..NvZeRpeezhCLSkKx3tHJh2aLsH.RC.', 'worker', 'electricity', 3, 'Chennai', '+91987654425', 1, '2026-08-14 09:14:00'),
+(12, 'Worker Six', 'worker.six@civicconnect.test', '$2y$12$SrdPb1.zIhkfDN1Nu/ymD..NvZeRpeezhCLSkKx3tHJh2aLsH.RC.', 'worker', 'municipal', 3, 'Chennai', '+91987654426', 1, '2026-08-14 09:15:00'),
+(13, 'Admin One', 'admin.one@civicconnect.test', '$2y$12$nyO98D6FesSRzj6Dz5RiSesT0MbEzjFrtQgYlcfZSWU7vLIdmGUPC', 'admin', NULL, NULL, 'Chennai', '+91987654521', 1, '2026-08-14 09:20:00'),
+(14, 'Admin Two', 'admin.two@civicconnect.test', '$2y$12$nyO98D6FesSRzj6Dz5RiSesT0MbEzjFrtQgYlcfZSWU7vLIdmGUPC', 'admin', NULL, NULL, 'Chennai', '+91987654522', 1, '2026-08-14 09:21:00'),
+(15, 'Admin Three', 'admin.three@civicconnect.test', '$2y$12$nyO98D6FesSRzj6Dz5RiSesT0MbEzjFrtQgYlcfZSWU7vLIdmGUPC', 'admin', NULL, NULL, 'Chennai', '+91987654523', 1, '2026-08-14 09:22:00'),
+(16, 'Admin Four', 'admin.four@civicconnect.test', '$2y$12$nyO98D6FesSRzj6Dz5RiSesT0MbEzjFrtQgYlcfZSWU7vLIdmGUPC', 'admin', NULL, NULL, 'Chennai', '+91987654524', 1, '2026-08-14 09:23:00'),
+(17, 'Admin Five', 'admin.five@civicconnect.test', '$2y$12$nyO98D6FesSRzj6Dz5RiSesT0MbEzjFrtQgYlcfZSWU7vLIdmGUPC', 'admin', NULL, NULL, 'Chennai', '+91987654525', 1, '2026-08-14 09:24:00'),
+(18, 'Admin Six', 'admin.six@civicconnect.test', '$2y$12$nyO98D6FesSRzj6Dz5RiSesT0MbEzjFrtQgYlcfZSWU7vLIdmGUPC', 'admin', NULL, NULL, 'Chennai', '+91987654526', 1, '2026-08-14 09:25:00');
 
 --
--- Demo civic data for the database-backed City Pulse heatmap.
--- Each canonical issue has child rows in issue_reports; the API groups by
--- geohash and counts those reports to calculate cluster density.
+-- Six compact civic records make multi-device changes easy to observe.
+-- Issue 1 has two same-category reports at the same location. Issue 2 is a
+-- different road problem nearby, while the remaining issues are city signals.
 --
 
 INSERT INTO `issues` (`id`, `user_id`, `title`, `description`, `category`, `severity`, `status`, `lat`, `lng`, `geohash`, `address`, `ward_id`, `upvote_count`, `is_verified`, `ai_confidence`, `is_manipulated`, `priority_score`, `parent_issue_id`, `created_at`, `updated_at`, `resolved_at`) VALUES
-(1, 1, 'Road damage near Anna Salai', 'Multiple citizens have reported a deep pothole and uneven surface near the Teynampet stretch.', 'pothole', 5, 'in_progress', 13.06040000, 80.24960000, 'tf3461e', 'Anna Salai, Teynampet', NULL, 51, 1, 0.961, 0, 98.0000, NULL, '2026-08-07 08:30:00', '2026-08-07 10:30:00', NULL),
-(2, 1, 'Overflowing collection point', 'Waste has been accumulating around the collection point on Ranganathan Street.', 'garbage', 4, 'pending', 13.04180000, 80.23410000, 'tf341y0', 'Ranganathan Street, T. Nagar', NULL, 36, 1, 0.934, 0, 88.0000, NULL, '2026-08-07 09:10:00', '2026-08-07 09:10:00', NULL),
-(3, 1, 'Waterlogging after rainfall', 'Residents are reporting standing water that is slowing traffic on the Velachery Main Road.', 'waterlogging', 5, 'pending', 12.98150000, 80.21810000, 'tf31c7j', 'Velachery Main Road', NULL, 42, 1, 0.973, 0, 95.0000, NULL, '2026-08-06 18:45:00', '2026-08-06 18:45:00', NULL),
-(4, 1, 'Uneven road surface near Adyar', 'The road surface near LB Road has broken patches and is difficult for two-wheelers after dark.', 'road_damage', 4, 'acknowledged', 13.00680000, 80.25720000, 'tf31frc', 'LB Road, Adyar', NULL, 24, 1, 0.918, 0, 76.0000, NULL, '2026-08-06 15:20:00', '2026-08-06 16:00:00', NULL),
-(5, 1, 'Streetlights out on Kutchery Road', 'Several streetlights are not working along the Mylapore stretch.', 'streetlight', 3, 'in_progress', 13.03380000, 80.26760000, 'tf344s9', 'Kutchery Road, Mylapore', NULL, 17, 1, 0.902, 0, 61.0000, NULL, '2026-08-06 11:05:00', '2026-08-06 12:15:00', NULL),
-(6, 1, 'Open drain beside the bus stop', 'An uncovered drain beside the bus stop is creating a safety hazard for pedestrians.', 'open_drain', 4, 'pending', 13.07320000, 80.26090000, 'tf3467u', 'Poonamallee High Road, Egmore', NULL, 16, 1, 0.945, 0, 71.0000, NULL, '2026-08-05 16:00:00', '2026-08-05 16:00:00', NULL),
-(7, 1, 'Deep pothole near Guindy station', 'A pothole has opened near the station entrance and is forcing vehicles into the next lane.', 'pothole', 4, 'in_progress', 13.01080000, 80.21310000, 'tf34129', 'GST Road, Guindy', NULL, 13, 1, 0.927, 0, 60.0000, NULL, '2026-08-05 12:25:00', '2026-08-05 13:10:00', NULL),
-(8, 1, 'Water collects at the junction', 'Standing water is returning at the East Coast Road junction after every heavy shower.', 'waterlogging', 3, 'acknowledged', 12.98330000, 80.25980000, 'tf31f7e', 'East Coast Road, Thiruvanmiyur', NULL, 11, 1, 0.891, 0, 58.0000, NULL, '2026-08-04 17:40:00', '2026-08-04 18:05:00', NULL),
-(9, 1, 'Footpath partially blocked', 'A temporary structure is narrowing the pedestrian path along the fourth main road.', 'encroachment', 3, 'pending', 13.00030000, 80.26800000, 'tf31fw9', '4th Main Road, Besant Nagar', NULL, 8, 1, 0.876, 0, 44.0000, NULL, '2026-08-04 10:15:00', '2026-08-04 10:15:00', NULL),
-(10, 1, 'Drain cover needs replacement', 'A damaged drain cover near College Road is loose and difficult to see at night.', 'open_drain', 3, 'pending', 13.05690000, 80.24250000, 'tf343by', 'College Road, Nungambakkam', NULL, 9, 1, 0.913, 0, 50.0000, NULL, '2026-08-03 14:20:00', '2026-08-03 14:20:00', NULL),
-(11, 1, 'Missed waste pickup', 'The scheduled waste pickup was missed and bags have been left beside the Royapettah road.', 'garbage', 2, 'resolved', 13.05260000, 80.26390000, 'tf3462n', 'Royapettah High Road', NULL, 7, 1, 0.899, 0, 31.0000, NULL, '2026-08-03 09:30:00', '2026-08-04 11:00:00', '2026-08-04 11:00:00'),
-(12, 1, 'Broken shoulder on the service road', 'The broken road shoulder is narrowing the service lane beside the industrial estate.', 'road_damage', 4, 'pending', 13.11430000, 80.15480000, 'tf2fxgq', 'Ambattur Industrial Estate', NULL, 10, 1, 0.905, 0, 64.0000, NULL, '2026-08-02 13:10:00', '2026-08-02 13:10:00', NULL),
-(13, 1, 'Construction waste on the verge', 'Construction waste has been left on the road edge along the OMR service road.', 'garbage', 3, 'in_progress', 12.90100000, 80.22790000, 'tf313ss', 'OMR Service Road, Sholinganallur', NULL, 6, 1, 0.862, 0, 40.0000, NULL, '2026-08-02 08:55:00', '2026-08-02 09:35:00', NULL),
-(14, 1, 'Graffiti on the compound wall', 'Graffiti was reported on the compound wall beside New Avadi Road and has since been cleaned.', 'graffiti', 2, 'resolved', 13.08370000, 80.24140000, 'tf343vy', 'New Avadi Road, Kilpauk', NULL, 4, 1, 0.844, 0, 18.0000, NULL, '2026-08-01 16:05:00', '2026-08-02 10:30:00', '2026-08-02 10:30:00'),
-(15, 1, 'Fallen branch cleared from lane', 'A fallen branch was blocking part of the lane near Madhavaram High Road.', 'fallen_tree', 3, 'resolved', 13.11670000, 80.24510000, 'tf34d5b', 'Madhavaram High Road, Perambur', NULL, 3, 1, 0.881, 0, 20.0000, NULL, '2026-07-31 11:30:00', '2026-08-01 09:15:00', '2026-08-01 09:15:00'),
-(16, 1, 'Streetlight repaired near Saidapet', 'A faulty streetlight was reported and repaired near Jones Road.', 'streetlight', 2, 'resolved', 13.02130000, 80.22340000, 'tf341d2', 'Jones Road, Saidapet', NULL, 5, 1, 0.895, 0, 15.0000, NULL, '2026-07-30 18:15:00', '2026-07-31 08:30:00', '2026-07-31 08:30:00');
+(1, 1, 'Pothole cluster near Anna Salai', 'A deep pothole and uneven surface have been reported twice near the Teynampet stretch.', 'pothole', 5, 'pending', 13.06040000, 80.24960000, 'tf3461e', 'Anna Salai, Teynampet', 1, 0, 1, 0.961, 0, 74.0000, NULL, '2026-08-14 08:30:00', '2026-08-14 08:30:00', NULL),
+(2, 2, 'Road damage beside Anna Salai', 'A separate broken road patch is close to the pothole cluster and may need one coordinated inspection.', 'road_damage', 4, 'pending', 13.06100000, 80.25010000, 'tf3461s', 'Anna Salai, Teynampet', 1, 0, 1, 0.934, 0, 53.0000, NULL, '2026-08-14 09:10:00', '2026-08-14 09:10:00', NULL),
+(3, 3, 'Overflowing collection point', 'Waste has been accumulating around the collection point on Ranganathan Street.', 'garbage', 3, 'acknowledged', 13.04180000, 80.23410000, 'tf341y0', 'Ranganathan Street, T. Nagar', 2, 0, 1, 0.934, 0, 40.0000, NULL, '2026-08-14 10:00:00', '2026-08-14 10:00:00', NULL),
+(4, 4, 'Waterlogging after rainfall', 'Standing water is slowing traffic on the Velachery Main Road.', 'waterlogging', 5, 'pending', 12.98150000, 80.21810000, 'tf31c7j', 'Velachery Main Road', 2, 0, 1, 0.973, 0, 60.0000, NULL, '2026-08-14 10:30:00', '2026-08-14 10:30:00', NULL),
+(5, 5, 'Streetlights out on Kutchery Road', 'Several streetlights are not working along the Mylapore stretch.', 'streetlight', 3, 'in_progress', 13.03380000, 80.26760000, 'tf344s9', 'Kutchery Road, Mylapore', 3, 0, 1, 0.902, 0, 40.0000, NULL, '2026-08-14 11:05:00', '2026-08-14 11:05:00', NULL),
+(6, 6, 'Deep pothole near Guindy station', 'A pothole has opened near the station entrance and is forcing vehicles into the next lane.', 'pothole', 4, 'pending', 13.01080000, 80.21310000, 'tf34129', 'GST Road, Guindy', 3, 0, 1, 0.927, 0, 40.0000, NULL, '2026-08-14 11:35:00', '2026-08-14 11:35:00', NULL);
 
--- 96 child reports make the density values visible through the real API.
+-- Seven report events: one extra same-location pothole report and one report
+-- for each of the other five issues. Additional real actions can be observed
+-- without a large fixture set.
 INSERT INTO `issue_reports` (`id`, `issue_id`, `reporter_id`, `submitted_category`, `description`, `lat`, `lng`, `geohash`, `gps_accuracy`, `created_at`)
-SELECT cluster.base_report_id + report_numbers.report_number - 1,
-       cluster.issue_id,
-       1,
-       cluster.category,
-       CONCAT('Seeded citizen report #', report_numbers.report_number, ' for ', cluster.title),
-       cluster.lat,
-       cluster.lng,
-       cluster.geohash,
-       8.00,
-       DATE_SUB(cluster.created_at, INTERVAL report_numbers.report_number MINUTE)
-  FROM (
-    SELECT 1 AS issue_id, 1 AS base_report_id, 'pothole' AS category, 'Road damage near Anna Salai' AS title, 13.06040000 AS lat, 80.24960000 AS lng, 'tf3461e' AS geohash, 18 AS report_count, '2026-08-07 08:30:00' AS created_at
-    UNION ALL SELECT 2, 19, 'garbage', 'Overflowing collection point', 13.04180000, 80.23410000, 'tf341y0', 12, '2026-08-07 09:10:00'
-    UNION ALL SELECT 3, 31, 'waterlogging', 'Waterlogging after rainfall', 12.98150000, 80.21810000, 'tf31c7j', 10, '2026-08-06 18:45:00'
-    UNION ALL SELECT 4, 41, 'road_damage', 'Uneven road surface near Adyar', 13.00680000, 80.25720000, 'tf31frc', 8, '2026-08-06 15:20:00'
-    UNION ALL SELECT 5, 49, 'streetlight', 'Streetlights out on Kutchery Road', 13.03380000, 80.26760000, 'tf344s9', 7, '2026-08-06 11:05:00'
-    UNION ALL SELECT 6, 56, 'open_drain', 'Open drain beside the bus stop', 13.07320000, 80.26090000, 'tf3467u', 6, '2026-08-05 16:00:00'
-    UNION ALL SELECT 7, 62, 'pothole', 'Deep pothole near Guindy station', 13.01080000, 80.21310000, 'tf34129', 4, '2026-08-05 12:25:00'
-    UNION ALL SELECT 8, 66, 'waterlogging', 'Water collects at the junction', 12.98330000, 80.25980000, 'tf31f7e', 6, '2026-08-04 17:40:00'
-    UNION ALL SELECT 9, 72, 'encroachment', 'Footpath partially blocked', 13.00030000, 80.26800000, 'tf31fw9', 3, '2026-08-04 10:15:00'
-    UNION ALL SELECT 10, 75, 'open_drain', 'Drain cover needs replacement', 13.05690000, 80.24250000, 'tf343by', 4, '2026-08-03 14:20:00'
-    UNION ALL SELECT 11, 79, 'garbage', 'Missed waste pickup', 13.05260000, 80.26390000, 'tf3462n', 5, '2026-08-03 09:30:00'
-    UNION ALL SELECT 12, 84, 'road_damage', 'Broken shoulder on the service road', 13.11430000, 80.15480000, 'tf2fxgq', 4, '2026-08-02 13:10:00'
-    UNION ALL SELECT 13, 88, 'garbage', 'Construction waste on the verge', 12.90100000, 80.22790000, 'tf313ss', 3, '2026-08-02 08:55:00'
-    UNION ALL SELECT 14, 91, 'graffiti', 'Graffiti on the compound wall', 13.08370000, 80.24140000, 'tf343vy', 2, '2026-08-01 16:05:00'
-    UNION ALL SELECT 15, 93, 'fallen_tree', 'Fallen branch cleared from lane', 13.11670000, 80.24510000, 'tf34d5b', 2, '2026-07-31 11:30:00'
-    UNION ALL SELECT 16, 95, 'streetlight', 'Streetlight repaired near Saidapet', 13.02130000, 80.22340000, 'tf341d2', 2, '2026-07-30 18:15:00'
-  ) AS cluster
-  INNER JOIN (
-    SELECT 1 AS report_number UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL SELECT 12 UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15 UNION ALL SELECT 16 UNION ALL SELECT 17 UNION ALL SELECT 18
-  ) AS report_numbers ON report_numbers.report_number <= cluster.report_count;
+(1, 1, 'pothole', 'Deep pothole reported at the same location.', 13.06040000, 80.24960000, 'tf3461e', 8.00, '2026-08-14 08:30:00'),
+(2, 2, 'pothole', 'A second citizen saw the same pothole.', 13.06045000, 80.24965000, 'tf3461e', 9.00, '2026-08-14 08:45:00'),
+(3, 3, 'road_damage', 'Broken road patch close to Anna Salai.', 13.06100000, 80.25010000, 'tf3461s', 12.00, '2026-08-14 09:10:00'),
+(4, 4, 'garbage', 'Overflowing collection point needs attention.', 13.04180000, 80.23410000, 'tf341y0', 10.00, '2026-08-14 10:00:00'),
+(5, 5, 'waterlogging', 'Standing water is affecting the road.', 12.98150000, 80.21810000, 'tf31c7j', 11.00, '2026-08-14 10:30:00'),
+(6, 6, 'streetlight', 'Several lights are out after sunset.', 13.03380000, 80.26760000, 'tf344s9', 14.00, '2026-08-14 11:05:00'),
+(7, 6, 'pothole', 'The pothole remains a concern for commuters.', 13.01080000, 80.21310000, 'tf34129', 15.00, '2026-08-14 11:35:00');
 
 --
 -- Indexes for dumped tables
@@ -400,6 +418,25 @@ ALTER TABLE `remember_tokens`
   ADD KEY `idx_remember_expiry` (`expires_at`);
 
 --
+-- Indexes for table `mobile_access_tokens`
+--
+ALTER TABLE `mobile_access_tokens`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_mobile_token_hash` (`token_hash`),
+  ADD KEY `idx_mobile_token_user` (`user_id`),
+  ADD KEY `idx_mobile_token_expiry` (`expires_at`);
+
+--
+-- Indexes for table `mobile_refresh_tokens`
+--
+ALTER TABLE `mobile_refresh_tokens`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_mobile_refresh_hash` (`token_hash`),
+  ADD KEY `idx_mobile_refresh_user` (`user_id`),
+  ADD KEY `idx_mobile_refresh_family` (`family_id`),
+  ADD KEY `idx_mobile_refresh_expiry` (`expires_at`);
+
+--
 -- Indexes for table `status_history`
 --
 ALTER TABLE `status_history`
@@ -473,6 +510,18 @@ ALTER TABLE `remember_tokens`
   MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
+-- AUTO_INCREMENT for table `mobile_access_tokens`
+--
+ALTER TABLE `mobile_access_tokens`
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `mobile_refresh_tokens`
+--
+ALTER TABLE `mobile_refresh_tokens`
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `status_history`
 --
 ALTER TABLE `status_history`
@@ -488,7 +537,7 @@ ALTER TABLE `upvotes`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

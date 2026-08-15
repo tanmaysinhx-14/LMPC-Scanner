@@ -1,7 +1,13 @@
 <?php // Unified Configurator for Project
+  if (!defined('CIVICCONNECT_ROOT')) {
+    define('CIVICCONNECT_ROOT', __DIR__);
+  }
+
+  require_once __DIR__ . '/functions/utility/urls.php';
   require_once __DIR__ . '/functions/database/database.php';
 
   require_once __DIR__ . '/functions/auth/session.php';
+  require_once __DIR__ . '/functions/auth/mobile.php';
 
   require_once __DIR__ . '/functions/location/geohash.php';
   require_once __DIR__ . '/functions/location/geolocation.php';
@@ -21,6 +27,7 @@
     if ($db instanceof PDO) {
       restoreRememberedLogin($db);
       refreshSessionUser($db);
+      authenticateMobileBearer($db);
     }
 
     $requiredRoles = $options['required_roles'] ?? [];
@@ -29,14 +36,14 @@
 
     if ($requiresLogin && !isLoggedIn()) {
       setToast(message: 'You are not logged in. Please log in to access this page.', type: 'danger');
-      header('Location: ../login/', true, 303);
+      header('Location: ' . civicRoute('login'), true, 303);
       exit;
     }
 
     if ($requiredRoles !== [] && isLoggedIn()
       && !in_array((string) ($_SESSION['user_role'] ?? ''), $requiredRoles, true)) {
       setToast(message: 'You do not have permission to access this page.', type: 'danger');
-      header('Location: ../login/', true, 303);
+      header('Location: ' . civicRoute('login'), true, 303);
       exit;
     }
 

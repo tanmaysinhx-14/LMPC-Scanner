@@ -22,17 +22,18 @@ try {
   if ($voteId) {
     $db->prepare('DELETE FROM upvotes WHERE id = ?')->execute([(int) $voteId]);
     $upvoted = false;
-    $db->prepare('UPDATE issues SET upvote_count = GREATEST(0, upvote_count - 1), priority_score = (severity * 20) + GREATEST(0, upvote_count - 1) WHERE id = ?')->execute([(int) $issueId]);
+    $db->prepare('UPDATE issues SET upvote_count = GREATEST(0, upvote_count - 1) WHERE id = ?')->execute([(int) $issueId]);
   } else {
     $db->prepare('INSERT INTO upvotes (issue_id, user_id, created_at) VALUES (?, ?, NOW())')->execute([(int) $issueId, $user['id']]);
     $upvoted = true;
-    $db->prepare('UPDATE issues SET upvote_count = upvote_count + 1, priority_score = (severity * 20) + upvote_count WHERE id = ?')->execute([(int) $issueId]);
+    $db->prepare('UPDATE issues SET upvote_count = upvote_count + 1 WHERE id = ?')->execute([(int) $issueId]);
   }
+  $priority = recalculateStoredIssuePriority($db, (int) $issueId);
   $count = $db->prepare('SELECT upvote_count FROM issues WHERE id = ?');
   $count->execute([(int) $issueId]);
   $upvoteCount = (int) $count->fetchColumn();
   $db->commit();
-  jsonResponse(200, $upvoted ? 'Issue upvoted.' : 'Upvote removed.', ['issue_id' => (int) $issueId, 'upvoted' => $upvoted, 'upvote_count' => $upvoteCount]);
+  jsonResponse(200, $upvoted ? 'Issue upvoted.' : 'Upvote removed.', ['issue_id' => (int) $issueId, 'upvoted' => $upvoted, 'upvote_count' => $upvoteCount, 'priority' => $priority]);
 } catch (Throwable $exception) {
   if ($db->inTransaction()) $db->rollBack();
   error_log('Issue upvote failed: ' . $exception->getMessage());
