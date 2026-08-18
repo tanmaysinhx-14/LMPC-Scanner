@@ -28,7 +28,6 @@ except ImportError:
 # project root used by the PHP backend for relative upload paths.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL_PATH = PROJECT_ROOT / "civic-dataset" / "runs" / "detect" / "train" / "weights" / "best.pt"
-PREVIOUS_MODEL_PATH = PROJECT_ROOT / "civic-dataset" / "runs" / "detect" / "train-4" / "weights" / "best.pt"
 DEPLOYMENT_MODEL_PATH = PROJECT_ROOT / "ai-service" / "models" / "best.pt"
 MODEL_PATH = DEFAULT_MODEL_PATH
 AI_SHARED_TOKEN = os.getenv("CIVICCONNECT_AI_TOKEN", "").strip()
@@ -111,7 +110,7 @@ def _model_candidates() -> list[Path]:
     if configured:
         configured_path = Path(configured)
         candidates.append(configured_path if configured_path.is_absolute() else PROJECT_ROOT / configured_path)
-    candidates.extend([DEFAULT_MODEL_PATH, PREVIOUS_MODEL_PATH, DEPLOYMENT_MODEL_PATH])
+    candidates.extend([DEFAULT_MODEL_PATH, DEPLOYMENT_MODEL_PATH])
 
     unique: list[Path] = []
     seen: set[Path] = set()

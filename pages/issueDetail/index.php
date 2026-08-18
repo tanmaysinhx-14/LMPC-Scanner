@@ -5,21 +5,24 @@ require __DIR__ . '/../../bootstrap.php';
 $bootstrapData = bootstrapAccounts();
 extract($bootstrapData);
 
+$viewer = sessionUser();
 $issueId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
-$detailEndpoint = $issueId ? civicApi('issues/detail.php', ['id' => (int) $issueId]) : '';
+$issueEndpoints = issueDetailPageEndpoints($urlForApi);
+$detailEndpoint = $issueId ? $issueEndpoints['detail'] . '?id=' . (int) $issueId : '';
 ?>
+<?php // Main HTML ?>
 <?php require_once CIVICCONNECT_ROOT . '/components/header.php'; ?>
 
 <body class="app-body">
   <main class="container py-4 py-lg-5">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
-      <a href="<?= $e(civicRoute('feed')) ?>" class="text-decoration-none fw-bold"><i class="fas fa-arrow-left me-2"></i>Back to community feed</a>
-      <div class="d-flex gap-2"><a class="btn btn-sm btn-outline-secondary" href="<?= $e(civicRoute('pulse')) ?>"><i class="fas fa-map-location-dot me-1"></i>City pulse</a><?php if ($viewer): ?><a class="btn btn-sm btn-outline-secondary" href="<?= $e(civicRoute('dashboard')) ?>">Dashboard</a><?php else: ?><a class="btn btn-sm btn-primary" href="<?= $e(civicRoute('login')) ?>">Sign in</a><?php endif; ?></div>
+      <a href="<?= $e($urlForPublicFeed) ?>" class="text-decoration-none fw-bold"><i class="fas fa-arrow-left me-2"></i>Back to community feed</a>
+      <div class="d-flex gap-2"><a class="btn btn-sm btn-outline-secondary" href="<?= $e($urlForHeatmap) ?>"><i class="fas fa-map-location-dot me-1"></i>City pulse</a><?php if ($viewer): ?><a class="btn btn-sm btn-outline-secondary" href="<?= $e($urlForDashboard) ?>">Dashboard</a><?php else: ?><a class="btn btn-sm btn-primary" href="<?= $e($urlForLogin) ?>">Sign in</a><?php endif; ?></div>
     </div>
 
     <?php if (!$issueId): ?>
-      <section class="data-card p-4"><div class="empty-state"><i class="fas fa-link-slash"></i><h1 class="h3">Issue link is invalid</h1><p>Return to the community feed and choose a report to inspect.</p><a class="btn btn-primary" href="<?= $e(civicRoute('feed')) ?>">Open community feed</a></div></section>
+      <section class="data-card p-4"><div class="empty-state"><i class="fas fa-link-slash"></i><h1 class="h3">Issue link is invalid</h1><p>Return to the community feed and choose a report to inspect.</p><a class="btn btn-primary" href="<?= $e($urlForPublicFeed) ?>">Open community feed</a></div></section>
     <?php else: ?>
       <section id="issueDetailCard" class="data-card p-4 p-lg-5" aria-live="polite">
         <div id="issueLoading" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><p class="text-muted mt-3 mb-0">Loading issue details…</p></div>
@@ -31,12 +34,13 @@ $detailEndpoint = $issueId ? civicApi('issues/detail.php', ['id' => (int) $issue
       </section>
     <?php endif; ?>
   </main>
+  <?php // Bottom scripts ?>
   <script>
     const detailEndpoint = <?= json_encode($detailEndpoint, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-    const upvoteEndpoint = <?= json_encode(civicApi('issues/upvote.php'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    const upvoteEndpoint = <?= json_encode($issueEndpoints['upvote'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const civicCsrfToken = <?= json_encode(csrfToken(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const civicLoggedIn = <?= $viewer ? 'true' : 'false' ?>;
-    const loginUrl = <?= json_encode(civicRoute('login')) ?>;
+    const loginUrl = <?= json_encode($urlForLogin) ?>;
     function escapeHtml(value) { return String(value ?? '').replace(/[&<>\'\"]/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','\"':'&quot;'}[character])); }
     function formatCount(value) { return new Intl.NumberFormat().format(Number(value) || 0); }
     function statusClass(status) { return status === 'resolved' ? 'success' : (status === 'in_progress' || status === 'acknowledged' ? 'warning' : 'danger'); }

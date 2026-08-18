@@ -6,7 +6,7 @@
   extract($bootstrapData);
 ?>
 
-<?php // Backend for Login
+<?php // Backend orchestration
   // Prototype demo defaults. POST values replace these after a submission.
   $email = 'mail.citizen@gmail.com';
   $selectedRole = 'citizen';
@@ -34,35 +34,25 @@
       setToast('Too many sign-in attempts. Please wait 15 minutes and try again.', type: 'danger');
     }
     else {
-      $stmt = $db->prepare('SELECT id, name, email, password_hash, role, ward_id, city, is_active FROM users WHERE email = ? LIMIT 1');
-      $stmt->execute([$email]);
-      $user = $stmt->fetch();
-
-      if (!$user || (int) $user['is_active'] !== 1 || !password_verify($password, $user['password_hash']) || $user['role'] !== $selectedRole) {
-        recordLoginFailure($db, $email);
-        setToast('Invalid email, password, or account role.', type: 'danger');
+      $authentication = loginAuthenticate($db, $email, $password, $selectedRole, $rememberMe);
+      if (!$authentication['ok']) {
+        setToast($authentication['message'], type: 'danger');
       } else {
-        clearLoginFailures($db, $email);
-        if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
-          $rehash = $db->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
-          $rehash->execute([password_hash($password, PASSWORD_DEFAULT), (int) $user['id']]);
-        }
-        loginUser($db, $user, $rememberMe);
-        header('Location: ' . civicRoute('dashboard'), true, 303);
+        header('Location: ' . $urlForDashboard, true, 303);
         exit();
       }
     }
   }
 ?>
 
-<?php // Header (contains Unified Page Meta-Data and CSS imports)
+<?php // Main HTML
   require_once CIVICCONNECT_ROOT . '/components/header.php';
 ?>
 
 <body class="d-flex flex-column min-vh-100">
   <nav class="navbar navbar-expand-lg sticky-top bg-body border-bottom shadow-sm">
     <div class="container-fluid px-4">
-      <a href="<?= htmlspecialchars(civicRoute('home'), ENT_QUOTES, 'UTF-8') ?>" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary">
+      <a href="<?= htmlspecialchars($urlForRoot . '/', ENT_QUOTES, 'UTF-8') ?>" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary">
         <span class="d-inline-flex align-items-center justify-content-center rounded-3 text-white bg-primary" style="width:36px;height:36px;">
           <i class="fas fa-city"></i>
         </span>
@@ -72,7 +62,7 @@
         <button id="themeToggleBtn" class="btn btn-link text-body p-2 rounded-circle border-0" aria-label="Toggle theme">
           <i class="fas fa-moon fs-5" id="themeIcon"></i>
         </button>
-        <a href="<?= htmlspecialchars(civicRoute('register'), ENT_QUOTES, 'UTF-8') ?>" class="btn btn-primary rounded-pill px-4">
+        <a href="<?= $urlForRegister ?>" class="btn btn-primary rounded-pill px-4">
           <i class="fas fa-user-plus me-2"></i>
           Create Account
         </a>
@@ -95,7 +85,7 @@
                 <p class="text-muted">Sign in to your CivicConnect account</p>
               </div>
 
-              <form method="POST" action="./index.php">
+              <form method="POST" action="./">
                 <div class="mb-3">
                   <label for="loginRole" class="form-label fw-medium">Login As <span class="text-danger">*</span></label>
                   <div class="input-group">
@@ -164,7 +154,7 @@
                 <div class="text-center pt-4">
                   <p class="text-secondary mb-0">
                     Don't have an account?
-                    <a href="<?= htmlspecialchars(civicRoute('register'), ENT_QUOTES, 'UTF-8') ?>" class="text-primary fw-semibold text-decoration-none">
+                    <a href="<?= $urlForRegister ?>" class="text-primary fw-semibold text-decoration-none">
                       Create one now <i class="fas fa-arrow-right ms-1"></i>
                     </a>
                   </p>
@@ -177,13 +167,11 @@
       </div>
     </div>
   </section>
-
-  <?php // Contains Bottom-Credits and JS imports
+  <?php // Bottom scripts
     require_once CIVICCONNECT_ROOT . '/components/bottom-credits.php';
     require_once CIVICCONNECT_ROOT . '/components/footer.php';
   ?>
 
-  <script src="<?= htmlspecialchars(civicAsset('js/index.js'), ENT_QUOTES, 'UTF-8') ?>" type="text/javascript"></script>
   <script type="text/javascript">
     function togglePassword() {
       const passwordInput = document.getElementById('loginPassword');
@@ -222,16 +210,6 @@
       }
     });
 
-    document.addEventListener('DOMContentLoaded', function() {
-      const emailInput = document.getElementById('loginEmail');
-      if (emailInput) {
-        emailInput.addEventListener('blur', function() {
-          const email = this.value;
-          if (email) {
-          }
-        });
-      }
-    });
   </script>
 </body>
 </html>

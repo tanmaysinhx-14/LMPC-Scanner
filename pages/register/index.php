@@ -6,101 +6,31 @@
   extract($bootstrapData);
 ?>
 
-<?php
+<?php // Module data
   $viewer = sessionUser();
   $selectedRole = strtolower(trim((string) ($_POST['userRole'] ?? $_GET['role'] ?? 'citizen')));
-  $adminCount = null;
-  if ($db instanceof PDO) {
-    try {
-      $adminCount = (int) $db->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
-    } catch (Throwable $exception) {
-      error_log('Registration role check failed: ' . $exception->getMessage());
-    }
-  }
 ?>
 
-<?php // Account registration for all supported roles
+<?php // Backend orchestration
   if (isset($_POST['registerAccount']) || isset($_POST['registerCitizen'])) {
     requireCsrfToken();
-    $name = sanitizeInput($_POST['fullName'] ?? '');
-    $email = strtolower(trim((string) ($_POST['email'] ?? '')));
-    $phone = sanitizeInput($_POST['phone'] ?? '');
-    $city = sanitizeInput($_POST['city'] ?? '');
-    $ward_id = !empty($_POST['ward_id']) ? (int)$_POST['ward_id'] : null;
-    $password = (string) ($_POST['password'] ?? '');
-    $confirmPassword = (string) ($_POST['confirmPassword'] ?? '');
-    $requestedRole = strtolower(trim((string) ($_POST['userRole'] ?? '')));
-    $department = $requestedRole === 'worker' ? normalizedDepartment($_POST['department'] ?? null) : null;
-    $staffCode = trim((string) ($_POST['staffCode'] ?? ''));
-    $role = $requestedRole;
-    $termsAccepted = isset($_POST['termsAccepted']);
-    $supportedRoles = ['citizen', 'worker', 'admin'];
-    $isStaffRole = in_array($role, ['worker', 'admin'], true);
-    $isAdminViewer = ($viewer['role'] ?? '') === 'admin';
-    $registrationKey = trim((string) (getenv('CIVIC_STAFF_REGISTRATION_KEY') ?: ''));
-    $isFirstAdmin = $role === 'admin' && $adminCount === 0;
-    $staffRegistrationAllowed = $isAdminViewer || $isFirstAdmin
-      || ($registrationKey !== '' && $staffCode !== '' && hash_equals($registrationKey, $staffCode));
-
-    if (!$termsAccepted) {
-      setToast('Agree to Terms and Conditions.', 'danger');
-    }
-    elseif (!($db instanceof PDO)) {
+    if (!($db instanceof PDO)) {
       setToast('The service is temporarily unavailable. Please try again later.', 'danger');
-    }
-    elseif ($name === '' || !validateEmail($email) || !validatePassword($password)) {
-      setToast('Enter a valid name, email, and strong password.', 'danger');
-    }
-    elseif (!in_array($role, $supportedRoles, true)) {
-      setToast('Choose a valid CivicConnect role.', 'danger');
-    }
-    elseif ($isStaffRole && !$staffRegistrationAllowed) {
-      setToast('Worker and admin accounts can only be created by an admin, the first platform admin, or a valid staff registration key.', 'danger');
-    }
-    elseif ($password !== $confirmPassword) {
-      setToast('Passwords entered do not match.', 'danger');
-    } 
-    else {
-      $password_hash = password_hash($password, PASSWORD_DEFAULT);
-
-      try {
-        $stmt = $db->prepare("SELECT id FROM users WHERE email = :email");
-        $stmt->execute(['email' => $email]);
-
-        if ($stmt->fetch()) {
-          setToast('Account exists with this email.', 'danger');
-        } 
-        else {
-          $insertStmt = $db->prepare("INSERT INTO users (name, email, password_hash, role, department, ward_id, city, phone) VALUES (:name, :email, :password_hash, :role, :department, :ward_id, :city, :phone)");
-          $insertStmt->execute([
-            'name' => $name,
-            'email' => $email,
-            'password_hash' => $password_hash,
-            'role' => $role,
-            'department' => $department,
-            'ward_id' => $ward_id,
-            'city' => $city,
-            'phone' => $phone
-          ]);
-
-          setToast(ucfirst($role) . ' account created successfully. You can sign in now.', 'success');
-        }
-      } 
-      catch (PDOException $e) {
-        setToast('Database error occurred. Please try again later.', 'danger');
-      }
+    } else {
+      $registration = registerAccount($db, $_POST, $viewer);
+      setToast($registration['message'], $registration['ok'] ? 'success' : 'danger');
     }
   }
 ?>
 
-<?php // Header (contains Unified Page Meta-Data and CSS imports)
+<?php // Main HTML
   require_once CIVICCONNECT_ROOT . '/components/header.php';
 ?>
 
 <body class="d-flex flex-column min-vh-100">
   <nav class="navbar navbar-expand-lg sticky-top bg-body border-bottom shadow-sm">
     <div class="container">
-      <a href="<?= htmlspecialchars(civicRoute('home'), ENT_QUOTES, 'UTF-8') ?>" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary">
+      <a href="<?= htmlspecialchars($urlForRoot . '/', ENT_QUOTES, 'UTF-8') ?>" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-primary">
         <span class="d-inline-flex align-items-center justify-content-center rounded-3 bg-primary text-white" style="width: 36px; height: 36px;">
           <i class="fas fa-city"></i>
         </span>
@@ -110,7 +40,7 @@
         <button id="themeToggleBtn" class="btn btn-link text-body p-0 border-0" aria-label="Toggle theme">
           <i class="fas fa-moon fs-5" id="themeIcon"></i>
         </button>
-        <a href="<?= htmlspecialchars(civicRoute('login'), ENT_QUOTES, 'UTF-8') ?>" class="btn btn-secondary rounded-pill px-4">
+        <a href="<?= $urlForLogin ?>" class="btn btn-secondary rounded-pill px-4">
           <i class="fas fa-sign-in-alt me-2"></i> Sign In
         </a>
       </div>
@@ -134,7 +64,7 @@
               </div>
 
               <!-- Registration Form -->
-              <form method="POST" action="./index.php" novalidate>
+              <form method="POST" action="./" novalidate>
 
                 <!-- Full Name -->
                 <div class="mb-3">
@@ -347,7 +277,7 @@
                 <div class="text-center pt-4">
                   <p class="text-secondary mb-0">
                     Already have an account?
-                    <a href="<?= htmlspecialchars(civicRoute('login'), ENT_QUOTES, 'UTF-8') ?>" class="text-primary fw-semibold text-decoration-none">
+                    <a href="<?= $urlForLogin ?>" class="text-primary fw-semibold text-decoration-none">
                       Sign in here <i class="fas fa-arrow-right ms-1"></i>
                     </a>
                   </p>
@@ -361,13 +291,12 @@
     </div>
   </main>
 
-  <?php // Contains Bottom-Credits and JS imports
-    require_once __DIR__ . '/../../components/bottom-credits.php';
+<?php // Bottom scripts
+    require_once CIVICCONNECT_ROOT . '/components/bottom-credits.php';
     require_once CIVICCONNECT_ROOT . '/components/footer.php';
   ?>
 
-  <script type="text/javascript" src="<?= htmlspecialchars(civicAsset('js/index.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
-  <script type="text/javascript"> // Registrations Exclusive JS
+  <script type="text/javascript"> // Registration Exclusive JS
     // Password Visibility Toggle
     function togglePassword() {
       const passwordInput = document.getElementById('registerPassword');

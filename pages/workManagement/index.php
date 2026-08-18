@@ -5,63 +5,13 @@ require __DIR__ . '/../../bootstrap.php';
 $bootstrapData = bootstrapAccounts(['required_roles' => ['admin']]);
 extract($bootstrapData);
 
+// Backend orchestration
 $viewer = sessionUser() ?? [];
-$workers = [];
-$availableIssues = [];
-$activeAssignments = [];
-$requests = [];
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
-
-if ($db instanceof PDO) {
-  try {
-    $workers = $db->query(
-      "SELECT u.id, u.name, u.email, u.city, u.department,
-              (SELECT COUNT(*) FROM assignments a WHERE a.worker_id = u.id AND a.completed_at IS NULL) AS active_assignments
-         FROM users u
-        WHERE u.role = 'worker' AND u.is_active = 1
-        ORDER BY u.name ASC"
-    )->fetchAll(PDO::FETCH_ASSOC);
-
-    $availableIssues = $db->query(
-      "SELECT i.id, i.title, i.category, i.department, i.status, i.address, i.severity, i.priority_score, i.created_at,
-              COUNT(ir.id) AS report_count
-         FROM issues i
-         LEFT JOIN issue_reports ir ON ir.issue_id = i.id
-         LEFT JOIN assignments active_assignment
-           ON active_assignment.issue_id = i.id AND active_assignment.completed_at IS NULL
-        WHERE i.status IN ('pending', 'acknowledged', 'in_progress')
-          AND active_assignment.id IS NULL
-        GROUP BY i.id, i.title, i.category, i.department, i.status, i.address, i.severity, i.priority_score, i.created_at
-        ORDER BY i.priority_score DESC, i.created_at DESC
-        LIMIT 100"
-    )->fetchAll(PDO::FETCH_ASSOC);
-
-    $activeAssignments = $db->query(
-      "SELECT a.id, a.assigned_at, a.notes, i.id AS issue_id, i.title, i.category, i.status, i.address,
-              worker.name AS worker_name, administrator.name AS assigned_by_name
-         FROM assignments a
-         INNER JOIN issues i ON i.id = a.issue_id
-         INNER JOIN users worker ON worker.id = a.worker_id
-         LEFT JOIN users administrator ON administrator.id = a.assigned_by
-        WHERE a.completed_at IS NULL
-        ORDER BY i.priority_score DESC, a.assigned_at DESC"
-    )->fetchAll(PDO::FETCH_ASSOC);
-
-    $requests = $db->query(
-      "SELECT wr.id, wr.message, wr.created_at, wr.issue_id,
-              worker.name AS worker_name, worker.email AS worker_email,
-              i.title, i.address, i.status AS issue_status
-         FROM work_requests wr
-         INNER JOIN users worker ON worker.id = wr.worker_id
-         LEFT JOIN issues i ON i.id = wr.issue_id
-        WHERE wr.status = 'pending'
-        ORDER BY wr.created_at ASC, wr.id ASC"
-    )->fetchAll(PDO::FETCH_ASSOC);
-  } catch (Throwable $exception) {
-    error_log('Work management query failed: ' . $exception->getMessage());
-  }
-}
+$workData = fetchWorkManagementPageData($db instanceof PDO ? $db : null);
+extract($workData);
 ?>
+<?php // Main HTML ?>
 <?php require_once CIVICCONNECT_ROOT . '/components/header.php'; ?>
 <style>
   .work-hero { padding: 1.7rem; border-radius: 1.2rem; color: #fff; background: linear-gradient(120deg, #0f3b4d, #147d72 58%, #3ab88e); box-shadow: 0 18px 40px rgba(20,125,114,.2); }
@@ -87,21 +37,21 @@ if ($db instanceof PDO) {
       <div class="app-sidebar-brand"><span class="app-brand-mark"><i class="fas fa-city"></i></span><span>CivicConnect<small>Administrator console</small></span><button type="button" class="app-sidebar-close" data-sidebar-close aria-label="Close navigation"><i class="fas fa-xmark"></i></button></div>
       <div class="app-sidebar-label">Platform</div>
       <nav class="nav flex-column gap-1">
-        <a class="nav-link" href="<?= $e(civicRoute('dashboard')) ?>"><i class="fas fa-chart-pie fa-fw"></i><span>Dashboard</span></a>
-        <a class="nav-link active" href="<?= $e(civicRoute('work_management')) ?>"><i class="fas fa-briefcase fa-fw"></i><span>Work management</span></a>
-        <a class="nav-link" href="<?= $e(civicRoute('analytics')) ?>"><i class="fas fa-chart-line fa-fw"></i><span>Analytics</span></a>
-        <a class="nav-link" href="<?= $e(civicRoute('feed')) ?>"><i class="fas fa-layer-group fa-fw"></i><span>Community feed</span></a>
-        <a class="nav-link" href="<?= $e(civicRoute('pulse')) ?>"><i class="fas fa-map-location-dot fa-fw"></i><span>City pulse</span></a>
-        <a class="nav-link" href="<?= $e(civicRoute('register')) ?>"><i class="fas fa-user-plus fa-fw"></i><span>Create account</span></a>
+        <a class="nav-link" href="<?= $e($urlForDashboard) ?>"><i class="fas fa-chart-pie fa-fw"></i><span>Dashboard</span></a>
+        <a class="nav-link active" href="<?= $e($urlForWorkManagement) ?>"><i class="fas fa-briefcase fa-fw"></i><span>Work management</span></a>
+        <a class="nav-link" href="<?= $e($urlForAnalytics) ?>"><i class="fas fa-chart-line fa-fw"></i><span>Analytics</span></a>
+        <a class="nav-link" href="<?= $e($urlForPublicFeed) ?>"><i class="fas fa-layer-group fa-fw"></i><span>Community feed</span></a>
+        <a class="nav-link" href="<?= $e($urlForHeatmap) ?>"><i class="fas fa-map-location-dot fa-fw"></i><span>City pulse</span></a>
+        <a class="nav-link" href="<?= $e($urlForRegister) ?>"><i class="fas fa-user-plus fa-fw"></i><span>Create account</span></a>
       </nav>
       <div class="app-sidebar-spacer"></div>
       <div class="app-sidebar-user"><span class="app-avatar"><?= $e(strtoupper(substr((string) ($viewer['name'] ?? 'A'), 0, 1))) ?></span><div><strong><?= $e($viewer['name'] ?? 'Administrator') ?></strong><small>Full platform access</small></div></div>
-      <a class="nav-link text-danger mt-2" href="<?= $e(civicRoute('logout')) ?>"><i class="fas fa-arrow-right-from-bracket fa-fw"></i><span>Sign out</span></a>
+      <a class="nav-link text-danger mt-2" href="<?= $e($urlForLogout) ?>"><i class="fas fa-arrow-right-from-bracket fa-fw"></i><span>Sign out</span></a>
     </aside>
     <div class="app-sidebar-backdrop" data-sidebar-backdrop="adminSidebar"></div>
 
     <main class="app-content">
-      <header class="app-topbar"><div class="d-flex align-items-center gap-3"><button class="app-menu-toggle" data-sidebar-toggle="adminSidebar" aria-controls="adminSidebar" aria-expanded="true" aria-label="Toggle navigation"><i class="fas fa-bars"></i></button><div><div class="eyebrow">Administrator workflow</div><h1>Work management</h1></div></div><a class="btn btn-sm btn-outline-secondary" href="<?= $e(civicRoute('dashboard')) ?>"><i class="fas fa-arrow-left me-1"></i>Dashboard</a></header>
+      <header class="app-topbar"><div class="d-flex align-items-center gap-3"><button class="app-menu-toggle" data-sidebar-toggle="adminSidebar" aria-controls="adminSidebar" aria-expanded="true" aria-label="Toggle navigation"><i class="fas fa-bars"></i></button><div><div class="eyebrow">Administrator workflow</div><h1>Work management</h1></div></div><a class="btn btn-sm btn-outline-secondary" href="<?= $e($urlForDashboard) ?>"><i class="fas fa-arrow-left me-1"></i>Dashboard</a></header>
       <div class="container-fluid px-3 px-lg-4 py-4">
         <section class="work-hero mb-4"><div class="eyebrow text-white-50">Allocate the next fix</div><h2 class="h3 fw-bold mb-2">Turn city signals into field work.</h2><p class="mb-0 text-white-50">Assign unowned problems to active workers, review requests, and keep citizens informed automatically.</p></section>
 
@@ -132,6 +82,7 @@ if ($db instanceof PDO) {
       </div>
     </main>
   </div>
+  <?php // Bottom scripts ?>
   <script>
     const adminWorkCsrfToken = <?= json_encode(csrfToken(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     const assignIssueSelect = document.getElementById('assignIssue');
@@ -159,14 +110,14 @@ if ($db instanceof PDO) {
       const button = form.querySelector('button[type="submit"]');
       button.disabled = true;
       try {
-        await postWork(<?= json_encode(civicApi('work/assign.php')) ?>, {issue_id: Number(document.getElementById('assignIssue').value), worker_id: Number(document.getElementById('assignWorker').value), notes: document.getElementById('assignNotes').value});
+        await postWork(<?= json_encode($urlForApi . 'work/assign.php') ?>, {issue_id: Number(document.getElementById('assignIssue').value), worker_id: Number(document.getElementById('assignWorker').value), notes: document.getElementById('assignNotes').value});
         window.location.reload();
       } catch (error) { window.alert(error.message); button.disabled = false; }
     });
     document.querySelectorAll('[data-review-request]').forEach(button => button.addEventListener('click', async () => {
       button.disabled = true;
       try {
-        await postWork(<?= json_encode(civicApi('work/review-request.php')) ?>, {request_id: Number(button.dataset.reviewRequest), action: button.dataset.reviewAction});
+        await postWork(<?= json_encode($urlForApi . 'work/review-request.php') ?>, {request_id: Number(button.dataset.reviewRequest), action: button.dataset.reviewAction});
         window.location.reload();
       } catch (error) { window.alert(error.message); button.disabled = false; }
     }));

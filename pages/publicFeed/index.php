@@ -7,32 +7,21 @@ extract($bootstrapData);
 
 $viewer = sessionUser();
 $viewerRole = (string) ($viewer['role'] ?? '');
-$dashboardPath = civicDashboardForRole($viewerRole);
+$dashboardPath = $urlForDashboard;
 $requestedSort = strtolower((string) ($_GET['sort'] ?? 'hot'));
 $sort = in_array($requestedSort, ['hot', 'new', 'top', 'rising'], true) ? $requestedSort : 'hot';
 $category = strtolower(trim((string) ($_GET['category'] ?? '')));
 $status = strtolower(trim((string) ($_GET['status'] ?? '')));
 $query = substr(trim((string) ($_GET['q'] ?? '')), 0, 100);
 $page = max(1, (int) ($_GET['page'] ?? 1));
-$feed = ['items' => [], 'pagination' => ['page' => $page, 'limit' => 20, 'total' => 0, 'pages' => 0]];
-$cityStats = ['total' => 0, 'open' => 0, 'in_progress' => 0, 'resolved' => 0];
-
-if ($db instanceof PDO) {
-  try {
-    $feed = fetchIssueFeed($db, [
-      'page' => $page,
-      'limit' => 20,
-      'sort' => $sort,
-      'category' => $category,
-      'status' => $status,
-      'query' => $query,
-      'viewer_id' => $viewer['id'] ?? 0,
-    ]);
-    $cityStats = getIssueStats($db);
-  } catch (Throwable $exception) {
-    error_log('Public feed render failed: ' . $exception->getMessage());
-  }
-}
+$feedData = fetchPublicFeedPageData($db instanceof PDO ? $db : null, $viewer, [
+  'page' => $page,
+  'sort' => $sort,
+  'category' => $category,
+  'status' => $status,
+  'query' => $query,
+]);
+extract($feedData);
 
 $e = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 $feedUrl = static function (array $overrides = []) use ($sort, $category, $status, $query): string {
@@ -54,7 +43,7 @@ $uiStatus = static fn (?string $value): string => $value === 'pending' || $value
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-  <link rel="stylesheet" href="<?= $e(civicAsset('css/civic-ui.css')) ?>">
+  <link rel="stylesheet" href="<?= $e($urlForAssets . 'css/civic-ui.css') ?>">
   <style>
     :root { --feed-bg: #f3f6fb; --feed-line: #dfe5ef; --feed-muted: #6b7890; --feed-purple: #4255c7; --feed-ink: #16213f; --feed-teal: #0f9f8f; }
     body { background: radial-gradient(circle at 8% -10%, rgba(66,85,199,.12), transparent 28rem), radial-gradient(circle at 96% 18%, rgba(15,159,143,.1), transparent 24rem), var(--feed-bg); color: var(--feed-ink); font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
@@ -137,16 +126,16 @@ $uiStatus = static fn (?string $value): string => $value === 'pending' || $value
 <body>
   <nav class="feed-navbar">
     <div class="container d-flex align-items-center justify-content-between gap-3">
-      <a class="feed-brand" href="<?= $e(civicRoute('home')) ?>"><span class="feed-brand-icon"><i class="fas fa-city"></i></span><span class="nav-copy">CivicConnect</span></a>
+      <a class="feed-brand" href="<?= $e($urlForRoot . '/') ?>"><span class="feed-brand-icon"><i class="fas fa-city"></i></span><span class="nav-copy">CivicConnect</span></a>
       <div class="d-flex align-items-center gap-2">
-        <a class="btn btn-sm btn-outline-secondary" href="<?= $e(civicRoute('pulse')) ?>"><i class="fas fa-map-location-dot me-1"></i><span class="d-none d-md-inline">City pulse</span></a>
+        <a class="btn btn-sm btn-outline-secondary" href="<?= $e($urlForHeatmap) ?>"><i class="fas fa-map-location-dot me-1"></i><span class="d-none d-md-inline">City pulse</span></a>
         <?php if ($viewer): ?>
           <a class="btn btn-sm btn-outline-secondary" href="<?= $e($dashboardPath) ?>"><i class="fas fa-th-large me-1"></i><span class="d-none d-sm-inline">Dashboard</span></a>
-          <?php if ($viewerRole === 'citizen'): ?><a class="btn btn-sm btn-primary" href="<?= $e(civicRoute('report')) ?>"><i class="fas fa-plus me-1"></i>Report issue</a><?php endif; ?>
-          <a class="btn btn-sm btn-link text-danger text-decoration-none d-none d-md-inline" href="<?= $e(civicRoute('logout')) ?>">Logout</a>
+          <?php if ($viewerRole === 'citizen'): ?><a class="btn btn-sm btn-primary" href="<?= $e($urlForReport) ?>"><i class="fas fa-plus me-1"></i>Report issue</a><?php endif; ?>
+          <a class="btn btn-sm btn-link text-danger text-decoration-none d-none d-md-inline" href="<?= $e($urlForLogout) ?>">Logout</a>
         <?php else: ?>
-          <a class="btn btn-sm btn-outline-secondary" href="<?= $e(civicRoute('login')) ?>"><i class="fas fa-sign-in-alt me-1"></i>Sign in</a>
-          <a class="btn btn-sm btn-primary" href="<?= $e(civicRoute('register')) ?>">Get started</a>
+          <a class="btn btn-sm btn-outline-secondary" href="<?= $e($urlForLogin) ?>"><i class="fas fa-sign-in-alt me-1"></i>Sign in</a>
+          <a class="btn btn-sm btn-primary" href="<?= $e($urlForRegister) ?>">Get started</a>
         <?php endif; ?>
       </div>
     </div>
@@ -165,13 +154,13 @@ $uiStatus = static fn (?string $value): string => $value === 'pending' || $value
       <div class="sort-bar"><span class="small text-muted me-1">Sort by</span><?php foreach (['hot' => 'Hot', 'new' => 'New', 'top' => 'Top', 'rising' => 'Rising'] as $sortKey => $sortLabel): ?><a class="sort-btn <?= $sort === $sortKey ? 'active' : '' ?>" href="<?= $e($feedUrl(['sort' => $sortKey, 'page' => 1])) ?>"><i class="fas <?= $sortKey === 'hot' ? 'fa-fire' : ($sortKey === 'new' ? 'fa-sparkles' : ($sortKey === 'top' ? 'fa-chart-line' : 'fa-arrow-trend-up')) ?> me-1"></i><?= $e($sortLabel) ?></a><?php endforeach; ?></div>
 
       <?php if ($feed['items'] === []): ?>
-        <div class="feed-empty"><i class="fas fa-city fa-2x mb-3"></i><h2 class="h5 fw-bold">No issues match these filters</h2><p class="mb-3">Be the first person to report a problem in this area.</p><a class="btn btn-primary" href="<?= $e(civicRoute('report')) ?>">Report an issue</a></div>
+        <div class="feed-empty"><i class="fas fa-city fa-2x mb-3"></i><h2 class="h5 fw-bold">No issues match these filters</h2><p class="mb-3">Be the first person to report a problem in this area.</p><a class="btn btn-primary" href="<?= $e($urlForReport) ?>">Report an issue</a></div>
       <?php else: ?>
         <?php foreach ($feed['items'] as $issue): ?>
           <?php $displayStatus = $uiStatus($issue['status']); ?>
           <article class="feed-post" id="issue-<?= (int) $issue['id'] ?>">
             <div class="post-header"><span>r/CivicConnect <span>&bull; Posted by <?= $e($issue['reporter_name'] ?: 'the community') ?></span></span></div>
-            <a class="post-title" href="<?= $e(civicRoute('issue_detail', ['id' => (int) $issue['id']])) ?>"><?= $e($issue['title'] ?: issueCategoryLabel($issue['category'])) ?></a>
+            <a class="post-title" href="<?= $e($urlForIssueDetail . '?id=' . (int) $issue['id']) ?>"><?= $e($issue['title'] ?: issueCategoryLabel($issue['category'])) ?></a>
             <div class="post-meta"><span><i class="fas fa-users me-1"></i><?= (int) $issue['report_count'] ?> report<?= (int) $issue['report_count'] === 1 ? '' : 's' ?></span><span>&bull;</span><span class="badge-location"><i class="fas fa-map-pin me-1"></i><?= $e($issue['address'] ?: 'Location recorded') ?></span><span class="badge-type"><?= $e(issueCategoryLabel($issue['category'])) ?></span><span class="badge-status <?= $e($displayStatus) ?>"><?= $e(issueStatusLabel($issue['status'])) ?></span><?php if (!empty($issue['assigned_worker_name'])): ?><span class="badge-assignment"><i class="fas fa-helmet-safety me-1"></i>Assigned to <?= $e($issue['assigned_worker_name']) ?><?php if (!empty($issue['assigned_by_name'])): ?> by <?= $e($issue['assigned_by_name']) ?><?php endif; ?><?= empty($issue['assignment_completed_at']) ? '' : ' · Completed' ?></span><?php else: ?><span class="badge-location"><i class="fas fa-hourglass-half me-1"></i>Awaiting assignment</span><?php endif; ?><span>&bull;</span><span><?= $e(date('M d, Y', strtotime((string) $issue['created_at']))) ?></span></div>
             <div class="community-signal"><i class="fas fa-chart-simple"></i><?= (int) ($issue['nearby_similar_reports'] ?? 0) ?> similar reports nearby · <?= (int) ($issue['city_similar_reports'] ?? 0) ?> <?= $e(strtolower(issueCategoryLabel($issue['category']))) ?> reports citywide</div>
             <?php if (!empty($issue['is_recurring'])): ?><div class="alert alert-warning py-2 px-3 small mb-2"><i class="fas fa-arrows-rotate me-1"></i>Previously resolved here — this issue has recurred within 30 days.</div><?php endif; ?>
@@ -185,7 +174,7 @@ $uiStatus = static fn (?string $value): string => $value === 'pending' || $value
     </section>
 
     <aside class="feed-sidebar">
-      <div class="side-card"><div class="side-card-header"><span class="side-dots"><span class="bg-danger"></span><span class="bg-warning"></span><span class="bg-success"></span></span>Issue dashboard</div><div class="side-card-body"><div class="stat-grid"><div><div class="stat-number stat-open"><?= (int) $cityStats['open'] ?></div><div class="stat-label">Open</div></div><div><div class="stat-number stat-progress"><?= (int) $cityStats['in_progress'] ?></div><div class="stat-label">In progress</div></div><div><div class="stat-number stat-resolved"><?= (int) $cityStats['resolved'] ?></div><div class="stat-label">Resolved</div></div></div><div id="issueMap" aria-label="City issue density map"></div><div class="map-legend"><span><i class="map-dot map-high"></i>High density</span><span><i class="map-dot map-medium"></i>Medium</span><span><i class="map-dot map-low"></i>Low</span></div><div class="map-preview-footer"><span class="small text-muted">Pan, zoom and tap a cluster.</span><a class="map-preview-link" href="<?= $e(civicRoute('pulse')) ?>">Open full heatmap <i class="fas fa-arrow-right ms-1"></i></a></div></div></div>
+      <div class="side-card"><div class="side-card-header"><span class="side-dots"><span class="bg-danger"></span><span class="bg-warning"></span><span class="bg-success"></span></span>Issue dashboard</div><div class="side-card-body"><div class="stat-grid"><div><div class="stat-number stat-open"><?= (int) $cityStats['open'] ?></div><div class="stat-label">Open</div></div><div><div class="stat-number stat-progress"><?= (int) $cityStats['in_progress'] ?></div><div class="stat-label">In progress</div></div><div><div class="stat-number stat-resolved"><?= (int) $cityStats['resolved'] ?></div><div class="stat-label">Resolved</div></div></div><div id="issueMap" aria-label="City issue density map"></div><div class="map-legend"><span><i class="map-dot map-high"></i>High density</span><span><i class="map-dot map-medium"></i>Medium</span><span><i class="map-dot map-low"></i>Low</span></div><div class="map-preview-footer"><span class="small text-muted">Pan, zoom and tap a cluster.</span><a class="map-preview-link" href="<?= $e($urlForHeatmap) ?>">Open full heatmap <i class="fas fa-arrow-right ms-1"></i></a></div></div></div>
       <div class="side-card"><div class="side-card-header"><i class="fas fa-layer-group text-primary"></i>How grouping works</div><div class="side-card-body"><p class="small text-muted mb-0">Nearby reports with the same category are combined into one post. More evidence increases the density signal and gives administrators a clearer picture of the problem.</p></div></div>
     </aside>
   </main>
@@ -202,10 +191,10 @@ $uiStatus = static fn (?string $value): string => $value === 'pending' || $value
     function formatCount(value) { return new Intl.NumberFormat().format(Number(value) || 0); }
 
     async function toggleUpvote(button) {
-      if (!civicLoggedIn) { window.location.href = <?= json_encode(civicRoute('login')) ?>; return; }
+      if (!civicLoggedIn) { window.location.href = <?= json_encode($urlForLogin) ?>; return; }
       button.disabled = true;
       try {
-        const response = await fetch(<?= json_encode(civicApi('issues/upvote.php')) ?>, { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': civicCsrfToken}, body: JSON.stringify({issue_id: Number(button.dataset.upvoteId)}) });
+        const response = await fetch(<?= json_encode($urlForApi . 'issues/upvote.php') ?>, { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': civicCsrfToken}, body: JSON.stringify({issue_id: Number(button.dataset.upvoteId)}) });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || 'Unable to update the vote.');
         button.classList.toggle('voted-up', Boolean(result.data?.upvoted));
@@ -220,7 +209,7 @@ $uiStatus = static fn (?string $value): string => $value === 'pending' || $value
       body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></div>';
       modal.show();
       try {
-        const response = await fetch(<?= json_encode(civicApi('issues/detail.php')) ?> + '?id=' + encodeURIComponent(issueId));
+        const response = await fetch(<?= json_encode($urlForApi . 'issues/detail.php') ?> + '?id=' + encodeURIComponent(issueId));
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || 'Issue details could not be loaded.');
         const issue = result.data.issue;
@@ -238,7 +227,7 @@ $uiStatus = static fn (?string $value): string => $value === 'pending' || $value
       const previewStyle = {version: 8, sources: {carto: {type: 'raster', tiles: ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', 'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', 'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OpenStreetMap contributors &copy; CARTO'}}, layers: [{id: 'carto', type: 'raster', source: 'carto'}]};
       const map = new maplibregl.Map({container: 'issueMap', style: previewStyle, center: [80.2707, 13.0827], zoom: 10.6, minZoom: 8, maxZoom: 17, attributionControl: true, scrollZoom: false});
       map.addControl(new maplibregl.NavigationControl({showCompass: false}), 'bottom-right');
-      const heatmapEndpoint = <?= json_encode(civicApi('stats/heatmap.php')) ?>;
+      const heatmapEndpoint = <?= json_encode($urlForApi . 'stats/heatmap.php') ?>;
       map.on('load', () => {
         fetch(heatmapEndpoint).then(response => response.json()).then(result => {
           const points = result.data?.points || [];

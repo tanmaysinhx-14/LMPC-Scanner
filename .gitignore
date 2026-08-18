@@ -10,15 +10,6 @@ civic-dataset/
 # Python Cache for AI-service
 ai-service/__pycache__/
 
-# Roboflow Dataset (YOLO26)
-archives/civic-issues.yolo26
-archives/garbage.yolo26
-archives/graffiti.yolo26
-archives/manhole.yolo26
-archives/pothole.yolo26
-archives/trash.yolo26
-archives/waterlogging.yolo26
-
 # AI-Model based files
 *.pt
 *.onnx
