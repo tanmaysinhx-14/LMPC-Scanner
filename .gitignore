@@ -1,35 +1,31 @@
-# Contains raw trained dataset
-raw/
-
-# Local PHP database credentials
-functions/database/database.local.php
-
 # Contains filtered trained dataset
-civic-dataset/
+Round-1/civic-dataset/
+
+# Contains raw dataset
+Round-1/model-training/
 
 # Python Cache for AI-service
-ai-service/__pycache__/
+Round-1/ai-service/__pycache__/
 
 # AI-Model based files
 *.pt
 *.onnx
 quantize.py
 
-upload/
+Round-1/uploads/
 
 # Repomix Output and Configuration Files
 repomix-output.xml
 
 # Expo / React Native generated state, bundles, dependencies, and builds
-mobile/node_modules/
-mobile/.expo/
-mobile/.expo-*/
-mobile/.expo-exports/
-mobile/dist/
-mobile/.eas/
-mobile/*.apk
-mobile/*.aab
+Round-1/mobile/node_modules/
+Round-1/mobile/.expo/
+Round-1/mobile/.expo-*/
+Round-1/mobile/.expo-exports/
+Round-1/mobile/dist/
+Round-1/mobile/.eas/
+Round-1/mobile/*.apk
+Round-1/mobile/*.aab
 
 # Local mobile configuration
-mobile/.env
-!mobile/.env.example
+Round-1/mobile/.env
