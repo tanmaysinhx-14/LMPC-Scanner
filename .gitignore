@@ -1,1 +1,5 @@
-archives/Merged/
+__pycache__/
+
+packaged-commodity-dataset/
+uploads/
+runs/
