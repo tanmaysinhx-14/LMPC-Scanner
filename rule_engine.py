@@ -71,8 +71,11 @@ _DATE_MONTH_WORD = re.compile(
     re.IGNORECASE,
 )
 _DATE_PREFIX = re.compile(
-    r"\b(?P<prefix>pkd|pkg|pkt|packed(?:\s+on)?|date\s+of\s+(?:packing|packaging|manufacture)|"
-    r"mfg|mfd|manufactured|dom|exp|expiry|use\s*(?:by|before)|best\s*before|bbe)\b",
+    r"\b(?P<prefix>pkd|pkg|pkt|packed(?:\s+on)?|date\s*of\s*(?:packing|packaging|manufacture)|"
+    r"mfg|mfd|manufactured|dom|exp|expiry|use\s*(?:by|before)|best\s*before|bbe)"
+    # Not \b: dot-matrix over-print runs the label into the date ("PKD12/08/2026"),
+    # and \b never matches between a letter and a digit.
+    r"(?![A-Za-z])",
     re.IGNORECASE,
 )
 _BEST_BEFORE_DURATION = re.compile(
@@ -205,6 +208,23 @@ _DIRECT_KEYWORD_FIXES = {
 }
 _DOMAIN_SUFFIXES = r"(?:com|in|org|net|coop|co\.in)"
 
+#: Tokens the OCR healers must leave alone. Both healers are aggressive by
+#: design - they exist to rescue "trur|" into "OUR" - but they were also
+#: rewriting lawful unit symbols: the keyword healer turned "1 kg" into "1 PKG"
+#: (Levenshtein ratio 0.8 against the "pkg" packing keyword) and the numeric
+#: healer turned "500ml" into "500m1" (the l-to-1 glyph rule), so two perfectly
+#: ordinary net-quantity declarations parsed as no quantity at all.
+_PROTECTED_TOKENS = frozenset({
+    "g", "gm", "gms", "kg", "kgs", "mg", "mgs", "ml", "mls", "cl", "l", "ls",
+    "ltr", "ltrs", "liter", "liters", "litre", "litres", "mm", "cm", "m",
+    "pc", "pcs", "no", "nos", "n", "u", "rs", "inr",
+})
+#: A number glued to a unit ("500ml", "1kg", "2OOg"). The head may still contain
+#: OCR glyph confusions worth healing; the unit must survive untouched.
+_NUMBER_WITH_UNIT = re.compile(
+    r"(?i)^(?P<head>[\dOoIl|.,]+)(?P<unit>kgs?|mgs?|mls?|kg|mg|ml|cl|gms?|ltrs?|pcs?|nos?|[gl])$"
+)
+
 
 def _coerce_text(value: Any) -> str:
     if value is None:
@@ -221,6 +241,8 @@ def _coerce_text(value: Any) -> str:
 def _heal_keyword(match: re.Match[str]) -> str:
     raw = match.group(0)
     lookup = raw.strip("|.").lower()
+    if lookup in _PROTECTED_TOKENS or _NUMBER_WITH_UNIT.match(lookup):
+        return raw
     if lookup in _DIRECT_KEYWORD_FIXES:
         return _DIRECT_KEYWORD_FIXES[lookup]
     candidate = lookup.replace("0", "o").replace("1", "i").replace("5", "s").replace("|", "i")
@@ -267,12 +289,23 @@ def clean_ocr_text(text: str) -> str:
     return cleaned
 
 
+_GLYPH_TO_DIGIT = str.maketrans({"O": "0", "o": "0", "I": "1", "l": "1", "|": "1"})
+
+
 def _normalize_numeric_token(match: re.Match[str]) -> str:
     token = match.group(1)
+    with_unit = _NUMBER_WITH_UNIT.match(token)
+    if with_unit and any(character.isdigit() for character in with_unit.group("head")):
+        # "500ml" is a number glued to its unit. Healing glyphs in the numeric
+        # head is always safe here ("5OOml" -> "500ml", the single most common
+        # net-quantity misread); touching the unit is not, because l-to-1 would
+        # destroy every millilitre declaration on the shelf.
+        return with_unit.group("head").translate(_GLYPH_TO_DIGIT) + with_unit.group("unit")
     digit_count = sum(character.isdigit() for character in token)
     if digit_count < 2 or not re.search(r"[A-Za-z|]", token):
         return token
-    token = token.translate(str.maketrans({"O": "0", "o": "0", "I": "1", "l": "1", "|": "1"}))
+    token = token.translate(_GLYPH_TO_DIGIT)
+
     if digit_count >= len(token) - 1:
         token = token.translate(str.maketrans({"S": "5", "s": "5"}))
     return token
@@ -596,14 +629,18 @@ def parse_date_declarations(text: str) -> dict[str, Any]:
                     nearby_distance = distance
             if nearby_prefix is None:
                 continue
+            # OCR frequently loses the space inside "USE BY" / "BEST BEFORE", so
+            # the prefix is matched with optional whitespace rather than literal
+            # spaces. Without this, "USEBY:10/11/2026" parses as no date at all.
             is_manufacture_prefix = bool(
                 re.search(
-                    r"(?:pkd|pkg|pkt|packed|date of (?:packing|packaging|manufacture)|mfg|mfd|manufactured|dom)",
+                    r"(?:pkd|pkg|pkt|packed|date\s*of\s*(?:packing|packaging|manufacture)|"
+                    r"mfg|mfd|manufactured|dom)",
                     nearby_prefix,
                 )
             )
             is_expiry_prefix = bool(
-                re.search(r"(?:exp|expiry|use (?:by|before)|best before|bbe)", nearby_prefix)
+                re.search(r"(?:exp|expiry|use\s*(?:by|before)|best\s*before|bbe)", nearby_prefix)
             )
             if is_manufacture_prefix:
                 manufacture_date = parsed.isoformat()
@@ -708,6 +745,35 @@ def parse_consumer_care_fssai(text: str, additional_text: str = "") -> dict[str,
     )
 
 
+#: The veg / non-veg mark is required by the FSS (Labelling and Display)
+#: Regulations, not by LMPC Rule 6, so a missing mark is reported but carries no
+#: Legal Metrology penalty. Keeping its penalty at zero stops it from inflating
+#: the Rule 6 exposure figure the inspector reports.
+_DIETARY_REASONS = {
+    "VEG": "Green vegetarian mark detected on the pack.",
+    "NON_VEG": "Brown/maroon non-vegetarian mark detected on the pack.",
+    "UNCERTAIN": "A dietary mark was located but its colour was inconclusive - verify visually.",
+    "NOT_DETECTED": "No dietary mark was located on the supplied panels.",
+}
+
+
+def validate_dietary_mark(dietary_status: str | None) -> dict[str, Any]:
+    """Report the veg / non-veg mark as an advisory (non-penalising) row."""
+
+    status = (dietary_status or "NOT_DETECTED").upper()
+    if status not in _DIETARY_REASONS:
+        status = "NOT_DETECTED"
+    result: dict[str, Any] = {
+        "extracted_text": None if status == "NOT_DETECTED" else status,
+        "dietary_status": status,
+        "is_compliant": status in {"VEG", "NON_VEG"},
+        "penalty_amount": 0,
+        "reason": _DIETARY_REASONS[status],
+        "statute": "FSS (Labelling and Display) Regulations 2020, reg. 5(3) - advisory here",
+    }
+    return result
+
+
 def validate_compliance(aggregated_data: dict[str, Any], dietary_status: str | None = None) -> dict[str, dict[str, Any]]:
     if not isinstance(aggregated_data, dict):
         aggregated_data = {}
@@ -737,4 +803,5 @@ def validate_compliance(aggregated_data: dict[str, Any], dietary_status: str | N
         "batch_details": batch_details,
         "manufacturer_info": manufacturer_info,
         "compliance_and_support": compliance_and_support,
+        "dietary_mark": validate_dietary_mark(dietary_status),
     }

@@ -17,6 +17,7 @@ import streamlit as st
 import db
 import debug_view
 import pipeline
+import webrtc_live
 from reporting import (
     build_report_payload,
     generate_csv_report,
@@ -384,62 +385,171 @@ def _render_report_downloads(scan: dict[str, Any], key_prefix: str, generated_by
         )
 
 
+def _run_analysis(
+    image_bytes_list: list[bytes],
+    image_names: list[str],
+    source: str = "upload",
+    capture_metadata: list[dict[str, Any]] | None = None,
+) -> bool:
+    """Detect, read, validate and store one scan. Shared by upload and live capture.
+
+    Both entry points must produce byte-identical scans, so the whole chain lives
+    here rather than inside either UI branch.
+    """
+
+    _remove_temporary_image(st.session_state.current_scan)
+    suffixes = [Path(name).suffix for name in image_names]
+    temporary_paths: list[Path] = []
+    try:
+        temporary_paths = _save_temporary_image(image_bytes_list, suffixes)
+        with st.spinner("Running YOLO detection, OCR across prepared crop variants, and rule validation..."):
+            scan = pipeline.analyze_images(image_bytes_list)
+            results = validate_compliance(scan.extracted, scan.dietary_status)
+    except Exception as error:
+        _remove_temporary_image({"temporary_paths": [str(path) for path in temporary_paths]})
+        st.error(f"Analysis failed: {error}")
+        return False
+    st.session_state.current_scan = {
+        "image_bytes_list": image_bytes_list,
+        "image_names": image_names,
+        "temporary_paths": [str(path) for path in temporary_paths],
+        "extracted_data": scan.extracted,
+        "detections_by_image": scan.detections_by_image,
+        "results": results,
+        "evidence_notes": st.session_state.inspector_evidence_notes,
+        "status": "READY",
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "capture_source": source,
+        "capture_metadata": capture_metadata or [],
+        "dietary_status": scan.dietary_status,
+        "ocr_backend": scan.ocr_backend,
+        "detect_seconds": round(scan.detect_seconds, 2),
+        "ocr_seconds": round(scan.ocr_seconds, 2),
+    }
+    return True
+
+
+def _render_ocr_diagnostics(scan: dict[str, Any]) -> None:
+    """Per-region OCR detail: which prepared variant won, and what the others read.
+
+    This is the panel that makes an OCR regression diagnosable instead of a
+    complaint - it shows every candidate reading the pipeline rejected.
+    """
+
+    rows: list[dict[str, Any]] = []
+    for image_index, detections in enumerate(scan.get("detections_by_image") or []):
+        for record in detections:
+            rows.append(
+                {
+                    "Panel": image_index + 1,
+                    "Class": record.get("canonical_name") or f"UNMAPPED:{record.get('raw_class_name')}",
+                    "YOLO": round(float(record.get("yolo_confidence") or 0.0), 2),
+                    "OCR text": record.get("ocr_text") or "",
+                    "OCR conf": None if record.get("ocr_confidence") is None else round(record["ocr_confidence"], 2),
+                    "Winning variant": record.get("ocr_variant") or "-",
+                    "Parsed": "yes" if record.get("parsed") else "no",
+                    "Engine": record.get("ocr_backend") or "-",
+                    "Seconds": record.get("ocr_seconds"),
+                }
+            )
+    if not rows:
+        st.info("No regions were detected, so there is nothing for the OCR engine to read.")
+        return
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    candidates: list[dict[str, Any]] = []
+    for image_index, detections in enumerate(scan.get("detections_by_image") or []):
+        for record in detections:
+            for candidate in record.get("candidates") or []:
+                candidates.append(
+                    {
+                        "Panel": image_index + 1,
+                        "Class": record.get("canonical_name") or "",
+                        "Variant": candidate.get("variant"),
+                        "Text": candidate.get("text"),
+                        "Conf": None if candidate.get("confidence") is None else round(candidate["confidence"], 2),
+                        "Parsed": "yes" if candidate.get("parsed") else "no",
+                        "Score": candidate.get("score"),
+                        "Seconds": candidate.get("seconds"),
+                        "Error": candidate.get("error"),
+                    }
+                )
+    if candidates:
+        with st.expander("Every candidate reading (plain / enhanced / binary per region)"):
+            st.caption(
+                "The pipeline scores each prepared variant on recognizer confidence, "
+                "whether the rule engine can parse it, and how much text it recovered."
+            )
+            st.dataframe(pd.DataFrame(candidates), use_container_width=True, hide_index=True)
+
+
 def _render_inspector() -> None:
     st.header("Inspector workspace")
     st.write("Capture all relevant panels of one product so the engine can aggregate the declarations before validation.")
-    uploaded_files = st.file_uploader(
-        "Attach product-panel photographs",
-        type=["jpg", "jpeg", "png"],
-        accept_multiple_files=True,
-        help="Add front, back, side, top, or bottom panels. These files become evidence attached to the scan.",
-        key="inspector_upload",
+    mode = st.radio(
+        "Capture source",
+        ["Upload photographs", "Live camera (WebRTC)"],
+        horizontal=True,
+        key="inspector_capture_mode",
+        help="Live capture streams from the browser camera, shows detection boxes in "
+             "real time, and runs the full OCR chain only on the frames you keep.",
     )
-    if uploaded_files:
-        image_bytes_list = [uploaded_file.getvalue() for uploaded_file in uploaded_files]
-        image_names = [uploaded_file.name for uploaded_file in uploaded_files]
-        st.caption(f"{len(uploaded_files)} evidence image(s) attached")
-        thumbnail_columns = st.columns(min(4, len(uploaded_files)))
-        for index, uploaded_file in enumerate(uploaded_files):
-            with thumbnail_columns[index % len(thumbnail_columns)]:
-                st.image(
-                    uploaded_file.getvalue(),
-                    caption=uploaded_file.name,
-                    use_container_width=True,
-                )
-        st.text_area(
-            "Evidence notes",
-            key="inspector_evidence_notes",
-            placeholder="Record panel orientation, lighting, visible damage, or other inspection context.",
+    st.text_area(
+        "Evidence notes",
+        key="inspector_evidence_notes",
+        placeholder="Record panel orientation, lighting, visible damage, or other inspection context.",
+    )
+
+    if mode == "Live camera (WebRTC)":
+        st.caption(
+            "Camera frames stay on this machine. If you expose this app on a network, "
+            "serve it over HTTPS behind this login - the WebRTC signalling path has no "
+            "authentication of its own."
         )
-        if st.button("Analyze package", type="primary", use_container_width=True):
-            _remove_temporary_image(st.session_state.current_scan)
-            suffixes = [Path(name).suffix for name in image_names]
-            temporary_paths: list[Path] = []
-            try:
-                temporary_paths = _save_temporary_image(image_bytes_list, suffixes)
-                with st.spinner("Running sequential YOLO, EasyOCR, and compliance validation..."):
-                    extracted_data, detections_by_image = pipeline.process_image(image_bytes_list)
-                    results = validate_compliance(extracted_data)
-            except Exception as error:
-                _remove_temporary_image({"temporary_paths": [str(path) for path in temporary_paths]})
-                st.error(f"Analysis failed: {error}")
-            else:
-                st.session_state.current_scan = {
-                    "image_bytes_list": image_bytes_list,
-                    "image_names": image_names,
-                    "temporary_paths": [str(path) for path in temporary_paths],
-                    "extracted_data": extracted_data,
-                    "detections_by_image": detections_by_image,
-                    "results": results,
-                    "evidence_notes": st.session_state.inspector_evidence_notes,
-                    "status": "READY",
-                    "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+
+        def _analyse_live(
+            image_bytes_list: list[bytes],
+            names: list[str],
+            captures: list[dict[str, Any]],
+        ) -> None:
+            metadata = [
+                {
+                    "sharpness": capture.get("sharpness"),
+                    "classes_found": capture.get("classes_found"),
+                    "note": capture.get("note"),
                 }
+                for capture in captures
+            ]
+            if _run_analysis(image_bytes_list, names, source="webrtc", capture_metadata=metadata):
                 st.rerun()
+
+        webrtc_live.render_live_capture(_analyse_live, key="inspector_live")
+    else:
+        uploaded_files = st.file_uploader(
+            "Attach product-panel photographs",
+            type=["jpg", "jpeg", "png"],
+            accept_multiple_files=True,
+            help="Add front, back, side, top, or bottom panels. These files become evidence attached to the scan.",
+            key="inspector_upload",
+        )
+        if uploaded_files:
+            image_bytes_list = [uploaded_file.getvalue() for uploaded_file in uploaded_files]
+            image_names = [uploaded_file.name for uploaded_file in uploaded_files]
+            st.caption(f"{len(uploaded_files)} evidence image(s) attached")
+            thumbnail_columns = st.columns(min(4, len(uploaded_files)))
+            for index, uploaded_file in enumerate(uploaded_files):
+                with thumbnail_columns[index % len(thumbnail_columns)]:
+                    st.image(
+                        uploaded_file.getvalue(),
+                        caption=uploaded_file.name,
+                        use_container_width=True,
+                    )
+            if st.button("Analyze package", type="primary", use_container_width=True):
+                if _run_analysis(image_bytes_list, image_names, source="upload"):
+                    st.rerun()
 
     current_scan = st.session_state.current_scan
     if not current_scan:
-        st.info("Attach one or more product panels and select Analyze package to begin.")
+        st.info("Attach one or more product panels, or capture from the live camera, to begin.")
         return
 
     passed, failed, penalty = _scan_summary(current_scan["results"])
@@ -448,8 +558,15 @@ def _render_inspector() -> None:
     second.metric("Fields requiring attention", failed)
     third.metric("Estimated penalty", f"INR {penalty:,}")
     fourth.metric("Evidence images", len(_image_paths_for_scan(current_scan)))
+    if current_scan.get("ocr_backend"):
+        st.caption(
+            f"Source: {current_scan.get('capture_source', 'upload')} | "
+            f"OCR engine: {current_scan['ocr_backend']} | "
+            f"detection {current_scan.get('detect_seconds', 0)}s, OCR {current_scan.get('ocr_seconds', 0)}s | "
+            f"dietary mark: {current_scan.get('dietary_status', 'NOT_DETECTED')}"
+        )
 
-    tabs = st.tabs(["Detection preview", "Compliance checklist", "Raw OCR", "Evidence and reports"])
+    tabs = st.tabs(["Detection preview", "Compliance checklist", "Raw OCR", "OCR diagnostics", "Evidence and reports"])
     with tabs[0]:
         _render_detection_preview(current_scan)
     with tabs[1]:
@@ -466,6 +583,8 @@ def _render_inspector() -> None:
             hide_index=True,
         )
     with tabs[3]:
+        _render_ocr_diagnostics(current_scan)
+    with tabs[4]:
         _render_evidence(current_scan)
         _render_report_downloads(current_scan, "inspector_report", st.session_state.username)
 
@@ -500,6 +619,7 @@ def _render_inspector() -> None:
                 _remove_temporary_image(current_scan)
                 st.session_state.current_scan = None
                 st.session_state.inspector_evidence_notes = ""
+                st.session_state["inspector_live_captures"] = []
                 st.rerun()
     else:
         st.info(f"Scan #{current_scan.get('scan_id', '')} is {current_scan.get('status', 'SUBMITTED')}.")

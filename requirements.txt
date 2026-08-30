@@ -4,8 +4,24 @@ numpy>=1.24
 Pillow>=10.0
 opencv-python>=4.8
 ultralytics>=8.0
-easyocr>=1.7
 python-Levenshtein>=0.25
 python-docx>=1.1
 matplotlib>=3.8
 reportlab>=4.0
+
+# OCR engines. Either one satisfies the pipeline; ocr_backends falls back to
+# whichever actually loads. rapidocr runs the PP-OCR models through ONNX Runtime,
+# which is how this project gets PaddleOCR-family accuracy without paddle - see
+# docs/ocr_improvement_plan.md for why paddle itself cannot be installed here.
+rapidocr-onnxruntime>=1.4
+onnxruntime>=1.17
+easyocr>=1.7
+
+# Live capture (WebRTC). streamlit-webrtc pulls aiortc and PyAV; both are listed
+# explicitly because webrtc_live imports av directly.
+streamlit-webrtc>=0.47
+aiortc>=1.9
+av>=12.0
+
+# Tests
+pytest>=8.0
