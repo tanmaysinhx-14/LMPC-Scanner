@@ -16,12 +16,17 @@ offers a small set of variants for the pipeline to try:
   without discarding the grey levels a hard threshold would (see
   ``heal_dot_matrix_text`` for the measurements that settled this)
 
+``plain`` wins most often on every class, but never by enough to make the others
+dispensable - see ``build_variants`` for the measured win rates and what they mean
+for the order the variants are tried in.
+
 Nothing here imports torch or an OCR engine, so it stays cheap to unit test.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from typing import Sequence
 
 import cv2
@@ -33,6 +38,16 @@ TARGET_TEXT_HEIGHT = 32
 #: interpolate noise and pay for the extra pixels.
 MIN_SCALE = 1.0
 MAX_SCALE = 6.0
+#: Absolute cap on the *scaled* crop's longer side, in pixels. Small statutory
+#: print still gets its full 6x upscale (a 187px date crop lands at ~1122px, well
+#: under this), but a large manufacturer / ingredient panel that would otherwise
+#: balloon to ~2600px is held here: past this the extra pixels are interpolation,
+#: not information, and cost the recognizer seconds per crop. This only ever
+#: *reduces* the factor and never drops it below MIN_SCALE, so it downscales
+#: nothing - an already-large crop is simply left at its native size. Tunable
+#: with ``LMPC_MAX_OUTPUT_SIDE`` so the ceiling can be re-measured without a code
+#: change (set it very high to effectively disable the cap).
+MAX_OUTPUT_SIDE = int(os.environ.get("LMPC_MAX_OUTPUT_SIDE", "1600"))
 #: Skew beyond this is a rotated pack, not a tilted photo; leave it to the user.
 MAX_DESKEW_DEGREES = 12.0
 
@@ -117,7 +132,9 @@ def scale_for_ocr(image: np.ndarray, target_height: int = TARGET_TEXT_HEIGHT) ->
     """Upscale so the measured text height lands near ``target_height``.
 
     Returns the scaled image and the factor applied, so callers can map boxes
-    back to original crop coordinates.
+    back to original crop coordinates. The factor is additionally held so the
+    scaled crop's longer side stays within ``MAX_OUTPUT_SIDE`` - see that
+    constant for why over-upscaling large panels only costs time.
     """
 
     if image is None or image.size == 0:
@@ -126,6 +143,11 @@ def scale_for_ocr(image: np.ndarray, target_height: int = TARGET_TEXT_HEIGHT) ->
     if measured <= 0:
         return image, 1.0
     factor = float(np.clip(target_height / measured, MIN_SCALE, MAX_SCALE))
+    # Hold large panels to MAX_OUTPUT_SIDE. ``max(MIN_SCALE, ...)`` keeps the cap
+    # from ever downscaling: a crop already past the cap is left at factor 1.0.
+    longer_side = max(image.shape[:2])
+    if longer_side > 0:
+        factor = min(factor, max(MIN_SCALE, MAX_OUTPUT_SIDE / float(longer_side)))
     if abs(factor - 1.0) < 0.05:
         return image, 1.0
     interpolation = cv2.INTER_CUBIC if factor > 1.0 else cv2.INTER_AREA
@@ -272,12 +294,45 @@ def build_variants(
     include_dotmatrix: bool | None = None,
     use_allowlist: bool = True,
 ) -> list[CropVariant]:
-    """Prepared versions of one crop, cheapest and most likely first.
+    """Prepared versions of one crop, best-measured first.
 
-    ``plain`` alone handles most offset-printed declarations. ``enhanced`` earns
-    its keep on glossy packs. ``dotmatrix`` is only worth its cost for the
-    over-printed classes, so by default it is added just for those - the caller
-    can force it either way.
+    Measured over a full-dataset sweep (RapidOCR, all variants scored on every
+    crop, 1397 images, ``runs/ocr_rapidocr.jsonl``), counting how often each
+    variant produced the *winning* candidate for its class:
+
+    ====================  =====  =====  =========  ========
+    class                 crops  plain  dotmatrix  enhanced
+    ====================  =====  =====  =========  ========
+    mrp_declaration        2756    36%        32%       31%
+    date_declarations      2467    36%        33%       31%
+    net_quantity           1479    59%         -        41%
+    manufacturer_details    915    59%         -        41%
+    consumer_care_fssai     761    52%         -        48%
+    product_name            633    84%         -        16%
+    ====================  =====  =====  =========  ========
+
+    ``plain`` takes the plurality in every class, so it stays first: it is also the
+    cheapest, which makes it the right thing for a truncated run to get. That
+    conclusion needed the full sweep - an earlier partial sample had ``enhanced``
+    ahead on ``consumer_care_fssai`` (53% to 46%), which the full dataset reverses
+    (52% to 48%).
+
+    No variant is dispensable either. Outside ``product_name``, the runner-up wins
+    31-48% of crops, so dropping it costs real readings: keeping only ``plain``
+    lowers the share of class-groups the rule engine accepts from 38.7% to 33.7%
+    overall, and from 64.9% to 55.9% on ``net_quantity``.
+
+    ``dotmatrix`` goes ahead of ``enhanced`` on the over-printed classes, where it
+    wins marginally more often (33% vs 31% on dates, 32% vs 31% on MRP) while
+    handing the recognizer a single channel instead of three.
+
+    The ``net_quantity`` and ``product_name`` rows are still biased samples: 24%
+    and 72% of their crops stop after ``plain`` satisfies the early stop, so their
+    ``enhanced`` share is measured only on the crops ``plain`` failed to close.
+    Both are ordered on cost, not on those figures.
+
+    ``dotmatrix`` is only worth its cost for the over-printed classes, so by
+    default it is added just for those - the caller can force it either way.
     """
 
     if crop_bgr is None or crop_bgr.size == 0:
@@ -289,22 +344,19 @@ def build_variants(
     straightened = deskew(crop_bgr)
     scaled, factor = scale_for_ocr(straightened)
 
-    variants = [
-        CropVariant("plain", scaled, factor, allowlist),
-        CropVariant("enhanced", enhance_text_roi(scaled), factor, allowlist),
-    ]
+    variants = [CropVariant("plain", scaled, factor, allowlist)]
     if include_dotmatrix:
         variants.append(CropVariant("dotmatrix", heal_dot_matrix_text(scaled), factor, allowlist))
+    variants.append(CropVariant("enhanced", enhance_text_roi(scaled), factor, allowlist))
     return variants
 
 
 def variant_names(canonical_name: str | None = None) -> Sequence[str]:
-    """Variant labels ``build_variants`` will produce for this class."""
+    """Variant labels ``build_variants`` will produce for this class, in order."""
 
-    names = ["plain", "enhanced"]
     if canonical_name in DOT_MATRIX_CLASSES:
-        names.append("dotmatrix")
-    return tuple(names)
+        return ("plain", "dotmatrix", "enhanced")
+    return ("plain", "enhanced")
 
 
 

@@ -3,6 +3,24 @@
 Newest first. Only user-visible or decision-relevant changes are listed; see
 `git log` for the full history.
 
+## 4 September 2026 - XAMPP/MySQL persistence and refresh-safe RBAC
+
+### Added
+
+- **Selectable database backend** - [`db.py`](../db.py) now supports SQLite (the
+  offline default) and XAMPP/MySQL via `LMPC_DB_BACKEND=mysql` plus the documented
+  `LMPC_MYSQL_*` connection variables. The schema is bootstrapped on first use and
+  keeps the existing scan, result, review and audit APIs.
+- **Revocable persistent sessions** - `SessionTokens` stores only a validator hash;
+  the opaque `lmpc_session` browser cookie restores the active user and role after a
+  refresh. Logout, expiry and account deactivation revoke tokens.
+- **XAMPP/RBAC runbook** - [`XAMPP_MYSQL_RBAC_SETUP.md`](XAMPP_MYSQL_RBAC_SETUP.md)
+  documents setup, smoke tests, refresh verification, role boundaries and security
+  caveats.
+- **Database/RBAC regression coverage** - [`tests/test_db.py`](../tests/test_db.py)
+  covers session persistence, expiry, revocation, account deactivation, role
+  restrictions and MySQL SQL translation.
+
 ## 30 August 2026 — OCR overhaul, WebRTC live capture, label repair
 
 ### Added

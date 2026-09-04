@@ -16,6 +16,7 @@ reportlab>=4.0
 rapidocr-onnxruntime>=1.4
 onnxruntime>=1.17
 easyocr>=1.7
+pytesseract>=0.3.13
 
 # Live capture (WebRTC). streamlit-webrtc pulls aiortc and PyAV; both are listed
 # explicitly because webrtc_live imports av directly.
@@ -23,5 +24,17 @@ streamlit-webrtc>=0.47
 aiortc>=1.9
 av>=12.0
 
+# Windows-only: DirectShow device *names*, which OpenCV does not expose - it can
+# only open a camera by integer index. Without this the offline camera picker has
+# to offer "device 0 / device 1" and the inspector cannot tell the integrated
+# webcam from Camo or OBS. Optional at runtime: frame_sources falls back to bare
+# indices when it is missing.
+pygrabber>=0.2; sys_platform == "win32"
+
 # Tests
 pytest>=8.0
+
+# Optional production-like persistence and refresh-safe Streamlit sessions.
+# Set LMPC_DB_BACKEND=mysql to use XAMPP/MySQL; SQLite remains the offline fallback.
+mysql-connector-python>=8.3
+streamlit-cookies-controller>=0.0.4

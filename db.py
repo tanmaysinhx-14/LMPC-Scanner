@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import json
+import os
 from pathlib import Path
+import re
 import secrets
 import sqlite3
 from typing import Any, Iterator
@@ -15,10 +17,162 @@ DB_PATH = Path(__file__).resolve().with_name("lmpc_scanner.db")
 ALLOWED_ROLES = ("Inspector", "Verifier", "Admin")
 ALLOWED_SCAN_STATUSES = ("PENDING", "APPROVED", "OVERRIDDEN")
 PASSWORD_ITERATIONS = 310_000
+SESSION_TTL_DAYS = max(1, int(os.environ.get("LMPC_SESSION_TTL_DAYS", "30")))
+MYSQL_DATABASE_RE = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def database_backend() -> str:
+    """Return the configured persistence backend.
+
+    SQLite remains the safe default for an offline demo. Set
+    ``LMPC_DB_BACKEND=mysql`` to use the XAMPP/MySQL connection settings below.
+    """
+
+    value = os.environ.get("LMPC_DB_BACKEND", "sqlite").strip().lower()
+    return "mysql" if value in {"mysql", "mariadb", "xampp"} else "sqlite"
+
+
+def database_description() -> str:
+    if database_backend() == "mysql":
+        host = os.environ.get("LMPC_MYSQL_HOST", "127.0.0.1")
+        port = os.environ.get("LMPC_MYSQL_PORT", "3306")
+        name = os.environ.get("LMPC_MYSQL_DATABASE", "lmpc_scanner")
+        return f"MySQL {host}:{port}/{name}"
+    return f"SQLite {DB_PATH.name}"
+
+
+class _CompatRow(dict):
+    """Dictionary row that also supports SQLite-style numeric indexing."""
+
+    def __getitem__(self, key: Any) -> Any:
+        if isinstance(key, int):
+            return tuple(self.values())[key]
+        return super().__getitem__(key)
+
+
+def _mysql_sql(sql: str) -> str:
+    """Translate the small SQLite-compatible SQL subset used by this module."""
+
+    sql = sql.replace("?", "%s")
+    return re.sub(r"CAST\(([^)]+) AS TEXT\)", r"CAST(\1 AS CHAR)", sql, flags=re.IGNORECASE)
+
+
+class _MySQLCursor:
+    def __init__(self, cursor: Any):
+        self._cursor = cursor
+
+    @property
+    def lastrowid(self) -> int | None:
+        return self._cursor.lastrowid
+
+    @property
+    def rowcount(self) -> int:
+        return self._cursor.rowcount
+
+    def execute(self, sql: str, params: Any = ()) -> "_MySQLCursor":
+        self._cursor.execute(_mysql_sql(sql), params)
+        return self
+
+    def executemany(self, sql: str, params: Any) -> "_MySQLCursor":
+        self._cursor.executemany(_mysql_sql(sql), params)
+        return self
+
+    @staticmethod
+    def _row(value: Any) -> _CompatRow | None:
+        return _CompatRow(value) if isinstance(value, dict) else value
+
+    def fetchone(self) -> _CompatRow | Any | None:
+        return self._row(self._cursor.fetchone())
+
+    def fetchall(self) -> list[_CompatRow | Any]:
+        return [self._row(row) for row in self._cursor.fetchall()]
+
+
+class _MySQLConnection:
+    def __init__(self, connection: Any):
+        self._connection = connection
+
+    def _cursor(self) -> _MySQLCursor:
+        return _MySQLCursor(self._connection.cursor(dictionary=True, buffered=True))
+
+    def execute(self, sql: str, params: Any = ()) -> _MySQLCursor:
+        return self._cursor().execute(sql, params)
+
+    def executemany(self, sql: str, params: Any) -> _MySQLCursor:
+        return self._cursor().executemany(sql, params)
+
+    def executescript(self, script: str) -> None:
+        for statement in script.split(";"):
+            statement = statement.strip()
+            if statement:
+                self.execute(statement)
+
+    def commit(self) -> None:
+        self._connection.commit()
+
+    def rollback(self) -> None:
+        self._connection.rollback()
+
+    def close(self) -> None:
+        self._connection.close()
+
+
+def _mysql_connection() -> _MySQLConnection:
+    try:
+        import mysql.connector
+    except ImportError as error:
+        raise RuntimeError(
+            "MySQL backend selected but mysql-connector-python is not installed. "
+            "Run: python -m pip install mysql-connector-python"
+        ) from error
+
+    database = os.environ.get("LMPC_MYSQL_DATABASE", "lmpc_scanner").strip()
+    if not MYSQL_DATABASE_RE.fullmatch(database):
+        raise ValueError("LMPC_MYSQL_DATABASE may contain only letters, numbers, and underscores")
+    options: dict[str, Any] = {
+        "host": os.environ.get("LMPC_MYSQL_HOST", "127.0.0.1"),
+        "port": int(os.environ.get("LMPC_MYSQL_PORT", "3306")),
+        "user": os.environ.get("LMPC_MYSQL_USER", "root"),
+        "password": os.environ.get("LMPC_MYSQL_PASSWORD", ""),
+        "connection_timeout": int(os.environ.get("LMPC_MYSQL_CONNECT_TIMEOUT", "5")),
+    }
+    try:
+        connection = mysql.connector.connect(database=database, **options)
+    except Exception as error:
+        # XAMPP commonly starts MySQL without a pre-created application schema.
+        # Create only the validated identifier, then retry the normal connection.
+        if getattr(error, "errno", None) != 1049:
+            raise RuntimeError(f"Could not connect to {database_description()}: {error}") from error
+        try:
+            server = mysql.connector.connect(**options)
+            cursor = server.cursor()
+            cursor.execute(
+                f"CREATE DATABASE IF NOT EXISTS `{database}` "
+                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            )
+            server.commit()
+            cursor.close()
+            server.close()
+            connection = mysql.connector.connect(database=database, **options)
+        except Exception as create_error:
+            raise RuntimeError(f"Could not create/connect to {database_description()}: {create_error}") from create_error
+    return _MySQLConnection(connection)
 
 
 @contextmanager
-def _connection() -> Iterator[sqlite3.Connection]:
+def _connection() -> Iterator[Any]:
+    if database_backend() == "mysql":
+        connection = _mysql_connection()
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+        return
+
     connection = sqlite3.connect(str(DB_PATH), timeout=10)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
@@ -62,25 +216,54 @@ def _verify_password(password: str, stored_password: str) -> bool:
 
 
 def _ensure_column(
-    connection: sqlite3.Connection,
+    connection: Any,
     table_name: str,
     column_name: str,
     column_definition: str,
 ) -> None:
-    columns = {
-        str(row[1])
-        for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
-    }
+    if database_backend() == "mysql":
+        columns = {
+            str(row["COLUMN_NAME"])
+            for row in connection.execute(
+                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+                (table_name,),
+            ).fetchall()
+        }
+    else:
+        columns = {
+            str(row[1])
+            for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+        }
     if column_name not in columns:
+        if database_backend() == "mysql":
+            mysql_definitions = {
+                ("Users", "active"): "TINYINT(1) NOT NULL DEFAULT 1",
+                ("Users", "created_at"): "VARCHAR(40) NOT NULL DEFAULT ''",
+                ("Scans", "product_name"): "VARCHAR(500) NOT NULL DEFAULT ''",
+                ("Scans", "evidence_notes"): "TEXT NOT NULL",
+                ("Scans", "evidence_hashes"): "LONGTEXT NOT NULL",
+                ("Scans", "reviewer_id"): "BIGINT UNSIGNED NULL",
+                ("Scans", "reviewed_at"): "VARCHAR(40) NULL",
+                ("Scans", "review_reason"): "TEXT NOT NULL",
+                ("ScanResults", "reason"): "TEXT NOT NULL",
+                ("ScanResults", "parsed_data"): "LONGTEXT NOT NULL",
+            }
+            column_definition = mysql_definitions.get(
+                (table_name, column_name), column_definition
+            )
         connection.execute(
             f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}"
         )
 
 
-def initialize_database() -> None:
-    with _connection() as connection:
-        connection.executescript(
-            """
+def _is_integrity_error(error: BaseException) -> bool:
+    if isinstance(error, sqlite3.IntegrityError):
+        return True
+    return getattr(error, "errno", None) in {1062, 1451, 1452}
+
+
+_SQLITE_SCHEMA = """
             CREATE TABLE IF NOT EXISTS Users (
                 user_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
@@ -136,8 +319,95 @@ def initialize_database() -> None:
                 ON ScanResults(scan_id);
             CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp
                 ON AuditEvents(timestamp);
-            """
-        )
+            CREATE TABLE IF NOT EXISTS SessionTokens (
+                token_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                selector TEXT NOT NULL UNIQUE,
+                validator_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                last_used_at TEXT,
+                revoked_at TEXT,
+                FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_tokens_user ON SessionTokens(user_id);
+            CREATE INDEX IF NOT EXISTS idx_session_tokens_expiry ON SessionTokens(expires_at);
+"""
+
+
+_MYSQL_SCHEMA = """
+            CREATE TABLE IF NOT EXISTS Users (
+                user_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(64) NOT NULL UNIQUE,
+                password VARCHAR(255) NOT NULL,
+                role VARCHAR(16) NOT NULL,
+                active TINYINT(1) NOT NULL DEFAULT 1,
+                created_at VARCHAR(40) NOT NULL DEFAULT ''
+            ) ENGINE=InnoDB;
+
+            CREATE TABLE IF NOT EXISTS Scans (
+                scan_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                inspector_id BIGINT UNSIGNED NOT NULL,
+                image_path LONGTEXT NOT NULL,
+                status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+                timestamp VARCHAR(40) NOT NULL,
+                product_name VARCHAR(500) NOT NULL DEFAULT '',
+                evidence_notes TEXT NOT NULL,
+                evidence_hashes LONGTEXT NOT NULL,
+                reviewer_id BIGINT UNSIGNED NULL,
+                reviewed_at VARCHAR(40) NULL,
+                review_reason TEXT NOT NULL,
+                CONSTRAINT fk_scans_inspector FOREIGN KEY (inspector_id) REFERENCES Users(user_id),
+                CONSTRAINT fk_scans_reviewer FOREIGN KEY (reviewer_id) REFERENCES Users(user_id),
+                INDEX idx_scans_status (status),
+                INDEX idx_scans_timestamp (timestamp)
+            ) ENGINE=InnoDB;
+
+            CREATE TABLE IF NOT EXISTS ScanResults (
+                result_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                scan_id BIGINT UNSIGNED NOT NULL,
+                rule_class VARCHAR(80) NOT NULL,
+                extracted_text TEXT NOT NULL,
+                is_compliant TINYINT(1) NOT NULL,
+                penalty_amount BIGINT NOT NULL DEFAULT 0,
+                reason TEXT NOT NULL,
+                parsed_data LONGTEXT NOT NULL,
+                CONSTRAINT fk_scan_results_scan FOREIGN KEY (scan_id) REFERENCES Scans(scan_id) ON DELETE CASCADE,
+                INDEX idx_scan_results_scan_id (scan_id)
+            ) ENGINE=InnoDB;
+
+            CREATE TABLE IF NOT EXISTS AuditEvents (
+                event_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                actor_id BIGINT UNSIGNED NULL,
+                scan_id BIGINT UNSIGNED NULL,
+                action VARCHAR(80) NOT NULL,
+                details TEXT NOT NULL,
+                timestamp VARCHAR(40) NOT NULL,
+                CONSTRAINT fk_audit_actor FOREIGN KEY (actor_id) REFERENCES Users(user_id),
+                CONSTRAINT fk_audit_scan FOREIGN KEY (scan_id) REFERENCES Scans(scan_id) ON DELETE SET NULL,
+                INDEX idx_audit_events_timestamp (timestamp)
+            ) ENGINE=InnoDB;
+
+            CREATE TABLE IF NOT EXISTS SessionTokens (
+                token_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id BIGINT UNSIGNED NOT NULL,
+                selector VARCHAR(64) NOT NULL UNIQUE,
+                validator_hash CHAR(64) NOT NULL,
+                created_at VARCHAR(40) NOT NULL,
+                expires_at VARCHAR(40) NOT NULL,
+                last_used_at VARCHAR(40) NULL,
+                revoked_at VARCHAR(40) NULL,
+                CONSTRAINT fk_session_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+                INDEX idx_session_tokens_user (user_id),
+                INDEX idx_session_tokens_expiry (expires_at)
+            ) ENGINE=InnoDB;
+
+"""
+
+
+def initialize_database() -> None:
+    with _connection() as connection:
+        connection.executescript(_MYSQL_SCHEMA if database_backend() == "mysql" else _SQLITE_SCHEMA)
 
         _ensure_column(connection, "Users", "active", "INTEGER NOT NULL DEFAULT 1")
         _ensure_column(connection, "Users", "created_at", "TEXT NOT NULL DEFAULT ''")
@@ -217,6 +487,138 @@ def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
     }
 
 
+def _session_token_parts(token: Any) -> tuple[str, str] | None:
+    if not isinstance(token, str) or not token or len(token) > 512:
+        return None
+    selector, separator, validator = token.partition(".")
+    if not separator or not selector or not validator:
+        return None
+    if len(selector) > 64 or len(validator) > 256:
+        return None
+    return selector, validator
+
+
+def create_session(user_id: int, ttl_days: int | None = None) -> str:
+    """Create an opaque, revocable browser session token.
+
+    Only a selector and SHA-256 validator hash are stored server-side. The raw
+    validator is returned once to the browser cookie and is never persisted.
+    """
+
+    days = SESSION_TTL_DAYS if ttl_days is None else max(1, int(ttl_days))
+    selector = secrets.token_urlsafe(18)
+    validator = secrets.token_urlsafe(32)
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat(
+        timespec="seconds"
+    )
+    initialize_database()
+    with _connection() as connection:
+        user = _require_roles(connection, int(user_id), ALLOWED_ROLES)
+        connection.execute(
+            """
+            INSERT INTO SessionTokens
+                (user_id, selector, validator_hash, created_at, expires_at, last_used_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(user["user_id"]),
+                selector,
+                hashlib.sha256(validator.encode("utf-8")).hexdigest(),
+                _now(),
+                expires_at,
+                _now(),
+            ),
+        )
+    return f"{selector}.{validator}"
+
+
+def get_session(token: Any) -> dict[str, Any] | None:
+    """Validate a browser token and return its current active user."""
+
+    parts = _session_token_parts(token)
+    if parts is None:
+        return None
+    selector, validator = parts
+    initialize_database()
+    with _connection() as connection:
+        row = connection.execute(
+            """
+            SELECT t.token_id, t.validator_hash, t.expires_at,
+                   u.user_id, u.username, u.role, u.active
+            FROM SessionTokens AS t
+            JOIN Users AS u ON u.user_id = t.user_id
+            WHERE t.selector = ? AND t.revoked_at IS NULL
+            """,
+            (selector,),
+        ).fetchone()
+        if row is None:
+            return None
+        if not bool(row["active"]):
+            connection.execute(
+                "UPDATE SessionTokens SET revoked_at = ? WHERE token_id = ?",
+                (_now(), int(row["token_id"])),
+            )
+            return None
+        try:
+            expires_at = datetime.fromisoformat(str(row["expires_at"]))
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            return None
+        if expires_at <= datetime.now(timezone.utc):
+            connection.execute(
+                "UPDATE SessionTokens SET revoked_at = ? WHERE token_id = ?",
+                (_now(), int(row["token_id"])),
+            )
+            return None
+        expected = str(row["validator_hash"])
+        actual = hashlib.sha256(validator.encode("utf-8")).hexdigest()
+        if not hmac.compare_digest(actual, expected):
+            return None
+        connection.execute(
+            "UPDATE SessionTokens SET last_used_at = ? WHERE token_id = ?",
+            (_now(), int(row["token_id"])),
+        )
+    return {
+        "user_id": int(row["user_id"]),
+        "username": str(row["username"]),
+        "role": str(row["role"]),
+        "active": True,
+    }
+
+
+def revoke_session(token: Any) -> bool:
+    parts = _session_token_parts(token)
+    if parts is None:
+        return False
+    selector, validator = parts
+    initialize_database()
+    validator_hash = hashlib.sha256(validator.encode("utf-8")).hexdigest()
+    with _connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE SessionTokens
+            SET revoked_at = ?
+            WHERE selector = ? AND validator_hash = ? AND revoked_at IS NULL
+            """,
+            (_now(), selector, validator_hash),
+        )
+    return cursor.rowcount > 0
+
+
+def revoke_user_sessions(user_id: int) -> int:
+    initialize_database()
+    with _connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE SessionTokens SET revoked_at = ?
+            WHERE user_id = ? AND revoked_at IS NULL
+            """,
+            (_now(), int(user_id)),
+        )
+    return max(0, int(cursor.rowcount))
+
+
 def create_user(
     actor_id: int,
     username: str,
@@ -247,7 +649,9 @@ def create_user(
                     _now(),
                 ),
             )
-        except sqlite3.IntegrityError as error:
+        except Exception as error:
+            if not _is_integrity_error(error):
+                raise
             raise ValueError("username already exists") from error
         user_id = int(cursor.lastrowid)
         connection.execute(
@@ -305,6 +709,11 @@ def set_user_active(actor_id: int, user_id: int, active: bool) -> bool:
         )
         if cursor.rowcount == 0:
             raise LookupError(f"User {user_id} was not found")
+        if not active:
+            connection.execute(
+                "UPDATE SessionTokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+                (_now(), int(user_id)),
+            )
         connection.execute(
             """
             INSERT INTO AuditEvents (actor_id, action, details, timestamp)
@@ -809,4 +1218,20 @@ def get_audit_events(actor_id: int, limit: int = 200) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
-initialize_database()
+DATABASE_INIT_ERROR: str | None = None
+
+
+def ensure_database() -> bool:
+    """Initialize the selected backend and retain a UI-friendly error message."""
+
+    global DATABASE_INIT_ERROR
+    try:
+        initialize_database()
+    except Exception as error:
+        DATABASE_INIT_ERROR = str(error)
+        return False
+    DATABASE_INIT_ERROR = None
+    return True
+
+
+ensure_database()

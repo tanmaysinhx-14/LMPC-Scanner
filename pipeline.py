@@ -28,6 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import logging
 import os
+import re
 from threading import Lock
 import time
 from typing import Any, Callable, Sequence
@@ -128,6 +129,7 @@ __all__ = [
     "analyze_images",
     "decode_image",
     "detect_only",
+    "join_readings",
     "process_image",
     "read_region",
     "warmup",
@@ -183,11 +185,13 @@ def _get_model() -> Any:
     return model
 
 
-def warmup() -> dict[str, Any]:
+def warmup(backend_name: str | None = None) -> dict[str, Any]:
     """Load the detector and the OCR engine up front, e.g. on app start.
 
     Doing this lazily inside the first request is what made the prototype's first
-    scan feel broken: EasyOCR alone took 15 s to initialise.
+    scan feel broken: EasyOCR alone took 15 s to initialise. ``backend_name``
+    warms a specific engine (the app passes the one the user selected); ``None``
+    warms the configured default.
     """
 
     info: dict[str, Any] = {}
@@ -197,7 +201,7 @@ def warmup() -> dict[str, Any]:
     except Exception as exc:
         info["detector_error"] = str(exc)
     try:
-        backend = resolve_backend(OCR_BACKEND)
+        backend = resolve_backend(backend_name or OCR_BACKEND)
         backend.is_available()
         info["ocr"] = backend.describe()
     except Exception as exc:
@@ -366,16 +370,34 @@ def read_region(
     canonical_name: str,
     backend: Any | None = None,
     stop_score: float = 0.92,
+    max_variants: int | None = None,
 ) -> dict[str, Any]:
     """OCR one crop across its prepared variants and return the best reading.
 
-    Variants are tried cheapest-first and the loop stops early once a reading is
-    confident *and* parseable, so the extra variants only cost time on the
-    regions that actually need them.
+    Variants arrive from ``preprocessing.build_variants`` in measured-merit order
+    and the loop stops early once a reading is *fully compliant* and above
+    ``stop_score``. Measured over the full RapidOCR sweep (1397 images,
+    ``runs/ocr_rapidocr.jsonl``), that stop fires for 72% of ``product_name``
+    crops, 24% of ``net_quantity``, 17% of ``manufacturer_details``, and
+    essentially never for ``consumer_care_fssai`` (1%), ``date_declarations`` (1%)
+    or ``mrp_declaration`` (0%) - those parsers rarely return compliant on a single
+    box by design, since the user annotates the MRP tag, the price and "inclusive
+    of all taxes" as separate boxes. So the classes that cost the most time are
+    exactly the ones that try every variant, and also the ones where the variants
+    disagree most.
+
+    ``max_variants`` caps how many prepared variants are tried, truncating from
+    the front of that order. ``None`` keeps the full set - the app default.
+    Truncating to 1 costs real yield: on the same sweep, scoring only ``plain``
+    lowers the share of class-groups the rule engine accepts from 38.7% to 33.7%
+    overall, worst on ``net_quantity`` (64.9% to 55.9%) and ``mrp_declaration``
+    (23.8% to 17.3%).
     """
 
     engine = backend if backend is not None else resolve_backend(OCR_BACKEND)
     variants = preprocessing.build_variants(crop, canonical_name)
+    if max_variants is not None and max_variants > 0:
+        variants = variants[:max_variants]
     best: dict[str, Any] = {
         "text": "",
         "confidence": None,
@@ -396,6 +418,15 @@ def read_region(
                 "text": result.text,
                 "confidence": result.confidence,
                 "lines": result.line_count,
+                "ocr_lines": [
+                    {
+                        "text": line.text,
+                        "confidence": line.confidence,
+                        "bbox": list(line.box),
+                    }
+                    for line in result.lines
+                    if line.text.strip()
+                ],
                 "parsed": parsed,
                 "score": round(score, 4),
                 "seconds": round(result.elapsed_s, 3),
@@ -483,6 +514,38 @@ def analyze_image(
     return dietary_status
 
 
+def join_readings(texts: Sequence[str]) -> str:
+    """Concatenate one class's box readings, dropping repeats.
+
+    A pack shows the same declaration more than once (the MRP on the front and
+    again on the back panel, a date printed on the flap and the seal), and the
+    photographs a user uploads overlap. The detector finds each copy, so the naive
+    join hands the parser ``"MRP 29.00 MRP 29.00"`` - which reads as two prices
+    and can make a parser reject text it would otherwise accept. Measured on the
+    dataset sweep, 326 of 4250 image x class groups (7.7%) contained a repeated
+    reading, concentrated exactly where it hurts: 90 MRP groups, 81 date groups,
+    62 net-quantity groups.
+
+    Comparison ignores case, spacing and punctuation, so ``"MRP: 29.00"`` and
+    ``"MRP 29,00"`` count as one reading. The first spelling seen is the one kept -
+    order is preserved because the parsers read left to right.
+    """
+
+    seen: set[str] = set()
+    kept: list[str] = []
+    for text in texts:
+        cleaned = (text or "").strip()
+        if not cleaned:
+            continue
+        fingerprint = re.sub(r"[^a-z0-9]+", "", cleaned.lower())
+        if fingerprint and fingerprint in seen:
+            continue
+        if fingerprint:
+            seen.add(fingerprint)
+        kept.append(cleaned)
+    return " ".join(kept).strip()
+
+
 def analyze_images(image_bytes_list: Any, backend_name: str | None = None) -> ScanResult:
     """Full scan over one or more photographs of the same pack.
 
@@ -511,10 +574,7 @@ def analyze_images(image_bytes_list: Any, backend_name: str | None = None) -> Sc
             dietary = status
 
     result.dietary_status = dietary
-    result.extracted = {
-        name: " ".join(text for text in extracted.get(name, []) if text).strip()
-        for name in RULE_CLASSES
-    }
+    result.extracted = {name: join_readings(extracted.get(name, [])) for name in RULE_CLASSES}
     logger.info("scan complete: %s", result.summary())
     return result
 
@@ -529,7 +589,6 @@ def process_image(
 
     scan = analyze_images(image_bytes_list)
     return scan.extracted, scan.detections_by_image
-
 
 
 

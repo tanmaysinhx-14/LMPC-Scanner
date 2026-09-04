@@ -9,6 +9,13 @@
 **Repository classification:** Software; Agriculture, FoodTech & Rural Development  
 **Deadline recorded in the repository listing:** 20 September 2026
 
+> **Superseded status note (4 September 2026):** This report is the 30 August
+> baseline. The current consolidated assessment, including XAMPP/MySQL support,
+> refresh-safe RBAC/session persistence and the 365-test result, is
+> [`SIH26034_CONSOLIDATED_TECHNICAL_REPORT_2026-09-04.md`](SIH26034_CONSOLIDATED_TECHNICAL_REPORT_2026-09-04.md).
+> The database setup and refresh verification procedure is in
+> [`XAMPP_MYSQL_RBAC_SETUP.md`](XAMPP_MYSQL_RBAC_SETUP.md).
+
 The SIH listing and the longer concept note are stored in [`archives/SIH PS 2026.md`](archives/SIH%20PS%202026.md) and [`archives/Legal Metrology Prototype Approach.md`](archives/Legal%20Metrology%20Prototype%20Approach.md). The date and classification above are based on the repository copy and should be confirmed against the official SIH portal before submission.
 
 ## 1. Executive summary

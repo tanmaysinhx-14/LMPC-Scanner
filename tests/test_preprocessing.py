@@ -83,11 +83,17 @@ class TestVariants:
         assert [variant.name for variant in variants] == ["plain", "enhanced"]
 
     def test_over_printed_classes_get_the_dotmatrix_variant(self):
-        """MRP / date / batch text is ink-jetted after packing, so it needs the close."""
+        """MRP / date / batch text is ink-jetted after packing, so it needs the close.
+
+        Order matters because ``max_variants`` truncates from the front: the full
+        RapidOCR sweep has ``dotmatrix`` out-scoring ``enhanced`` on these classes
+        (33% vs 31% of wins on dates, 32% vs 31% on MRP) for less work, so it goes
+        second.
+        """
 
         for canonical in sorted(preprocessing.DOT_MATRIX_CLASSES):
             names = [variant.name for variant in preprocessing.build_variants(render_text_image(), canonical)]
-            assert names == ["plain", "enhanced", "dotmatrix"]
+            assert names == ["plain", "dotmatrix", "enhanced"]
             assert tuple(names) == tuple(preprocessing.variant_names(canonical))
 
     def test_dotmatrix_can_be_forced_either_way(self):

@@ -17,6 +17,8 @@ import streamlit as st
 import db
 import debug_view
 import pipeline
+import local_camera
+import session_cookie
 import webrtc_live
 from reporting import (
     build_report_payload,
@@ -29,6 +31,62 @@ from reporting import (
 from rule_engine import validate_compliance
 
 
+@st.cache_resource(show_spinner=False)
+def _warm_pipeline(backend_name: str) -> dict[str, Any]:
+    """Load the detector and the chosen OCR engine once per server process.
+
+    Without this the first scan pays the model + engine initialisation (seconds,
+    ~15s for EasyOCR) *inside its own spinner*, which reads as the app hanging.
+    ``st.cache_resource`` keeps the loaded objects across reruns and sessions and
+    is keyed on ``backend_name``, so flipping the engine toggle warms the new
+    engine exactly once.
+    """
+
+    return pipeline.warmup(backend_name)
+
+
+def _render_engine_controls() -> None:
+    """Sidebar OCR-engine picker, warmed on selection.
+
+    RapidOCR (PP-OCR via ONNX Runtime) stays the default: its confidence is
+    calibrated, which the review-routing depends on. EasyOCR runs on the GPU here
+    and is ~5x faster per crop - the switch to flip for a queue of panels or a
+    live demo, at the cost of uncalibrated confidence. See
+    ``docs/ocr_improvement_plan.md``.
+    """
+
+    from ocr_backends import backend_names
+
+    options = backend_names()
+    if not options:
+        return
+    labels = {
+        "rapidocr": "RapidOCR - CPU, calibrated confidence (default)",
+        "easyocr": "EasyOCR - GPU, ~5x faster, uncalibrated",
+    }
+    if "ocr_backend_choice" not in st.session_state:
+        st.session_state.ocr_backend_choice = "rapidocr" if "rapidocr" in options else options[0]
+
+    st.markdown("**OCR engine**")
+    st.selectbox(
+        "OCR engine",
+        options=options,
+        format_func=lambda name: labels.get(name, name),
+        key="ocr_backend_choice",
+        label_visibility="collapsed",
+        help="RapidOCR is the default. Switch to EasyOCR to use the GPU when a "
+             "queue of panels or a live demo makes latency matter.",
+    )
+    info = _warm_pipeline(st.session_state.ocr_backend_choice)
+    ocr_info = info.get("ocr") if isinstance(info, dict) else None
+    if isinstance(ocr_info, dict):
+        providers = ocr_info.get("providers") or []
+        device = ocr_info.get("device") or ("cuda" if "CUDAExecutionProvider" in providers else "cpu")
+        st.caption(f"Engine ready: {ocr_info.get('name')} ({device})")
+    elif isinstance(info, dict) and info.get("ocr_error"):
+        st.caption(f"OCR engine failed to load: {info['ocr_error']}")
+
+
 def _initialize_session_state() -> None:
     defaults = {
         "logged_in": False,
@@ -38,10 +96,43 @@ def _initialize_session_state() -> None:
         "current_scan": None,
         "login_error": None,
         "inspector_evidence_notes": "",
+        "session_token": None,
+        "session_restored": False,
+        "session_cookie_warning": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+    if not st.session_state.session_restored:
+        st.session_state.session_restored = True
+        token = session_cookie.get_token()
+        if token:
+            try:
+                user = db.get_session(token)
+            except Exception:
+                user = None
+            if user is not None:
+                st.session_state.logged_in = True
+                st.session_state.user_id = user["user_id"]
+                st.session_state.username = user["username"]
+                st.session_state.role = user["role"]
+                st.session_state.session_token = token
+            else:
+                session_cookie.clear_token()
+
+
+def _set_authenticated_user(user: dict[str, Any], token: str) -> None:
+    st.session_state.logged_in = True
+    st.session_state.user_id = user["user_id"]
+    st.session_state.username = user["username"]
+    st.session_state.role = user["role"]
+    st.session_state.session_token = token
+    if not session_cookie.set_token(token):
+        st.session_state.session_cookie_warning = (
+            "Browser-cookie support is unavailable. This login will last only "
+            "until the Streamlit session ends; install requirements.txt to keep "
+            "the login across refreshes."
+        )
 
 
 def _apply_style() -> None:
@@ -79,26 +170,43 @@ def _render_login() -> None:
             password = st.text_input("Password", type="password", autocomplete="current-password")
             submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
         if submitted:
-            user = db.authenticate_user(username, password)
+            database_failed = False
+            try:
+                user = db.authenticate_user(username, password)
+            except Exception as error:
+                user = None
+                database_failed = True
+                st.error(f"Database unavailable: {error}")
             if user is None:
-                st.error("Invalid credentials or inactive account.")
+                if not database_failed and not st.session_state.get("login_error"):
+                    st.error("Invalid credentials or inactive account.")
             else:
-                st.session_state.logged_in = True
-                st.session_state.user_id = user["user_id"]
-                st.session_state.username = user["username"]
-                st.session_state.role = user["role"]
-                st.session_state.login_error = None
-                st.rerun()
+                try:
+                    token = db.create_session(user["user_id"])
+                except Exception as error:
+                    st.error(f"Could not create a secure session: {error}")
+                else:
+                    _set_authenticated_user(user, token)
+                    st.session_state.login_error = None
+                    st.rerun()
         with st.expander("Demo accounts"):
             st.code("inspector / pass123\nverifier / pass123\nadmin / pass123")
 
 
 def _logout() -> None:
     _remove_temporary_image(st.session_state.current_scan)
+    token = st.session_state.get("session_token")
+    if token:
+        try:
+            db.revoke_session(token)
+        except Exception:
+            pass
+    session_cookie.clear_token()
     st.session_state.logged_in = False
     st.session_state.user_id = None
     st.session_state.username = None
     st.session_state.role = None
+    st.session_state.session_token = None
     st.session_state.current_scan = None
     st.rerun()
 
@@ -403,7 +511,9 @@ def _run_analysis(
     try:
         temporary_paths = _save_temporary_image(image_bytes_list, suffixes)
         with st.spinner("Running YOLO detection, OCR across prepared crop variants, and rule validation..."):
-            scan = pipeline.analyze_images(image_bytes_list)
+            scan = pipeline.analyze_images(
+                image_bytes_list, backend_name=st.session_state.get("ocr_backend_choice")
+            )
             results = validate_compliance(scan.extracted, scan.dietary_status)
     except Exception as error:
         _remove_temporary_image({"temporary_paths": [str(path) for path in temporary_paths]})
@@ -487,11 +597,13 @@ def _render_inspector() -> None:
     st.write("Capture all relevant panels of one product so the engine can aggregate the declarations before validation.")
     mode = st.radio(
         "Capture source",
-        ["Upload photographs", "Live camera (WebRTC)"],
+        ["Upload photographs", "Live camera (offline)", "Live camera (browser/WebRTC)"],
         horizontal=True,
         key="inspector_capture_mode",
-        help="Live capture streams from the browser camera, shows detection boxes in "
-             "real time, and runs the full OCR chain only on the frames you keep.",
+        help="Both live modes show detection boxes in real time and run the full OCR "
+             "chain only on the frames you keep. The offline mode opens the camera on "
+             "this machine, so it needs no internet; the WebRTC mode uses the browser's "
+             "camera and needs HTTPS or localhost.",
     )
     st.text_area(
         "Evidence notes",
@@ -499,12 +611,8 @@ def _render_inspector() -> None:
         placeholder="Record panel orientation, lighting, visible damage, or other inspection context.",
     )
 
-    if mode == "Live camera (WebRTC)":
-        st.caption(
-            "Camera frames stay on this machine. If you expose this app on a network, "
-            "serve it over HTTPS behind this login - the WebRTC signalling path has no "
-            "authentication of its own."
-        )
+    if mode.startswith("Live camera"):
+        capture_source = "local_camera" if "offline" in mode else "webrtc"
 
         def _analyse_live(
             image_bytes_list: list[bytes],
@@ -516,13 +624,28 @@ def _render_inspector() -> None:
                     "sharpness": capture.get("sharpness"),
                     "classes_found": capture.get("classes_found"),
                     "note": capture.get("note"),
+                    "camera": capture.get("source"),
                 }
                 for capture in captures
             ]
-            if _run_analysis(image_bytes_list, names, source="webrtc", capture_metadata=metadata):
+            if _run_analysis(
+                image_bytes_list, names, source=capture_source, capture_metadata=metadata
+            ):
                 st.rerun()
 
-        webrtc_live.render_live_capture(_analyse_live, key="inspector_live")
+        if capture_source == "local_camera":
+            st.caption(
+                "Frames never leave this machine: the camera is opened by this "
+                "application. Works with the internet unplugged."
+            )
+            local_camera.render_local_capture(_analyse_live, key="inspector_local")
+        else:
+            st.caption(
+                "Camera frames stay on this machine. If you expose this app on a network, "
+                "serve it over HTTPS behind this login - the WebRTC signalling path has no "
+                "authentication of its own."
+            )
+            webrtc_live.render_live_capture(_analyse_live, key="inspector_live")
     else:
         uploaded_files = st.file_uploader(
             "Attach product-panel photographs",
@@ -620,6 +743,7 @@ def _render_inspector() -> None:
                 st.session_state.current_scan = None
                 st.session_state.inspector_evidence_notes = ""
                 st.session_state["inspector_live_captures"] = []
+                st.session_state["inspector_local_captures"] = []
                 st.rerun()
     else:
         st.info(f"Scan #{current_scan.get('scan_id', '')} is {current_scan.get('status', 'SUBMITTED')}.")
@@ -910,6 +1034,14 @@ def main() -> None:
         layout="wide",
         initial_sidebar_state="expanded",
     )
+    if not db.ensure_database():
+        st.error(f"Database unavailable ({db.database_description()})")
+        st.code(db.DATABASE_INIT_ERROR or "Unknown database initialization error")
+        st.info(
+            "For XAMPP, start MySQL and check LMPC_MYSQL_HOST/PORT/USER/PASSWORD, "
+            "or unset LMPC_DB_BACKEND to use the local SQLite fallback."
+        )
+        return
     _initialize_session_state()
     _apply_style()
     if not st.session_state.logged_in:
@@ -920,7 +1052,13 @@ def main() -> None:
         st.markdown("### LMPC Scanner")
         st.write(f"**User:** {st.session_state.username}")
         st.write(f"**Role:** {st.session_state.role}")
-        st.caption("SIH26034 | Inspector decision support")
+        st.caption(f"SIH26034 | Inspector decision support | {db.database_description()}")
+        if st.session_state.get("session_cookie_warning"):
+            st.warning(st.session_state.session_cookie_warning)
+        if st.session_state.role == "Inspector":
+            st.divider()
+            _render_engine_controls()
+            st.divider()
         if st.button("Sign out", use_container_width=True):
             _logout()
 
