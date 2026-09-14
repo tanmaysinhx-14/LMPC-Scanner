@@ -9,7 +9,7 @@ import db
 
 @pytest.fixture
 def isolated_database(monkeypatch, tmp_path):
-    monkeypatch.delenv("LMPC_DB_BACKEND", raising=False)
+    monkeypatch.setenv("LMPC_DB_BACKEND", "sqlite")
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "scanner.db")
     db.DATABASE_INIT_ERROR = None
     assert db.ensure_database()

@@ -9,6 +9,8 @@ import textwrap
 from typing import Any
 from xml.sax.saxutils import escape
 
+import rule_config
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -52,13 +54,54 @@ def _image_paths(scan: dict[str, Any]) -> list[str]:
     return [str(path) for path in paths or [] if str(path).strip()]
 
 
+def _rule_config_block(scan: dict[str, Any], results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Describe the rule set this report was produced under.
+
+    Without this a reader cannot tell a clean pack from a narrow profile, so it
+    is part of the report rather than an admin-only detail.
+    """
+
+    config = rule_config.normalize_config(scan.get("rule_config"))
+    assessed = {
+        rule_config.result_metadata(result)["rule_class"]
+        for result in results
+        if rule_config.result_metadata(result)["in_scope"]
+    }
+    in_scope: list[dict[str, Any]] = []
+    out_of_scope: list[dict[str, Any]] = []
+    for entry in rule_config.RULE_CATALOGUE:
+        rule_class = entry["rule_class"]
+        setting = config["rules"][rule_class]
+        row = {
+            "rule_class": rule_class,
+            "declaration": entry["label"],
+            "statute": setting["statute"],
+            "severity": setting["severity"],
+            "penalty_if_failed": int(setting["penalty"]),
+        }
+        (in_scope if setting["enabled"] else out_of_scope).append(row)
+    return {
+        "profile_name": config["profile_name"],
+        "config_version": rule_config.config_version(config),
+        "schema_version": config["schema_version"],
+        "rules_in_scope": in_scope,
+        "rules_out_of_scope": out_of_scope,
+        "assessed_rule_classes": sorted(assessed),
+    }
+
+
 def build_report_payload(
     scan: dict[str, Any],
     generated_by: str = "",
 ) -> dict[str, Any]:
     results = _results_list(scan)
-    failures = [result for result in results if not bool(result.get("is_compliant", False))]
-    total_penalty = sum(int(result.get("penalty_amount", 0) or 0) for result in failures)
+    for result in results:
+        metadata = rule_config.result_metadata(result)
+        result.setdefault("severity", metadata["severity"])
+        result.setdefault("rule_label", metadata["label"])
+        result.setdefault("statute", metadata["statute"])
+        result.setdefault("in_scope", metadata["in_scope"])
+    summary = rule_config.summarize(results)
     paths = _image_paths(scan)
     hashes = scan.get("evidence_hashes", [])
     if isinstance(hashes, str):
@@ -82,11 +125,16 @@ def build_report_payload(
             "reviewed_at": scan.get("reviewed_at", ""),
             "review_reason": scan.get("review_reason", ""),
         },
+        "rule_config": _rule_config_block(scan, results),
         "summary": {
-            "total_fields": len(results),
-            "passed_fields": len(results) - len(failures),
-            "failed_fields": len(failures),
-            "estimated_penalty": total_penalty,
+            "total_fields": summary["total"],
+            "assessed_fields": summary["assessed"],
+            "skipped_fields": summary["skipped"],
+            "passed_fields": summary["passed"],
+            "failed_fields": summary["failed"],
+            "estimated_penalty": summary["penalty"],
+            "highest_severity": summary["highest_severity"],
+            "failed_by_severity": summary["failed_by_severity"],
         },
         "evidence": {
             "image_paths": paths,
@@ -111,7 +159,13 @@ def generate_csv_report(scan: dict[str, Any], generated_by: str = "") -> bytes:
             "status",
             "timestamp",
             "inspector",
+            "rule_profile",
+            "config_version",
             "rule_class",
+            "declaration",
+            "in_scope",
+            "severity",
+            "statute",
             "is_compliant",
             "extracted_text",
             "reason",
@@ -121,16 +175,26 @@ def generate_csv_report(scan: dict[str, Any], generated_by: str = "") -> bytes:
         ]
     )
     scan_data = payload["scan"]
+    profile = payload["rule_config"]
     evidence_images = " | ".join(payload["evidence"]["image_paths"])
     for result in payload["results"]:
+        metadata = rule_config.result_metadata(result)
         writer.writerow(
             [
                 scan_data.get("scan_id", ""),
                 scan_data.get("status", ""),
                 scan_data.get("timestamp", ""),
                 scan_data.get("inspector_username", ""),
+                profile["profile_name"],
+                profile["config_version"],
                 result.get("rule_class", ""),
-                "PASS" if result.get("is_compliant", False) else "FAIL",
+                metadata["label"],
+                "YES" if metadata["in_scope"] else "NO",
+                metadata["severity"],
+                metadata["statute"],
+                ("PASS" if result.get("is_compliant", False) else "FAIL")
+                if metadata["in_scope"]
+                else "NOT ASSESSED",
                 result.get("extracted_text", ""),
                 result.get("reason", ""),
                 json.dumps(
@@ -175,6 +239,7 @@ def generate_docx_report(scan: dict[str, Any], generated_by: str = "") -> bytes:
     )
     scan_data = payload["scan"]
     summary = payload["summary"]
+    profile = payload["rule_config"]
     metadata = document.add_table(rows=0, cols=2)
     metadata.alignment = WD_TABLE_ALIGNMENT.CENTER
     metadata.style = "Light Shading Accent 1"
@@ -184,8 +249,12 @@ def generate_docx_report(scan: dict[str, Any], generated_by: str = "") -> bytes:
         ("Inspector", scan_data.get("inspector_username", "")),
         ("Product", scan_data.get("product_name", "") or "Not detected"),
         ("Captured", scan_data.get("timestamp", "")),
+        ("Rule profile", f"{profile['profile_name']} ({profile['config_version']})"),
+        ("Declarations assessed", summary["assessed_fields"]),
+        ("Not assessed (out of scope)", summary["skipped_fields"]),
         ("Fields passed", summary["passed_fields"]),
         ("Fields failed", summary["failed_fields"]),
+        ("Highest severity", summary["highest_severity"] or "None"),
         ("Estimated penalty", f"INR {summary['estimated_penalty']:,}"),
     ):
         cells = metadata.add_row().cells
@@ -193,21 +262,43 @@ def generate_docx_report(scan: dict[str, Any], generated_by: str = "") -> bytes:
         cells[1].text = str(value)
 
     document.add_heading("Compliance results", level=1)
-    table = document.add_table(rows=1, cols=5)
+    table = document.add_table(rows=1, cols=6)
     table.style = "Table Grid"
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     for cell, heading in zip(
         table.rows[0].cells,
-        ("Rule class", "Status", "Extracted text", "Reason", "Penalty"),
+        ("Declaration", "Statutory basis", "Severity", "Status", "Reason", "Penalty"),
     ):
         cell.text = heading
     for result in payload["results"]:
+        row_meta = rule_config.result_metadata(result)
         cells = table.add_row().cells
-        cells[0].text = str(result.get("rule_class", ""))
-        cells[1].text = "PASS" if result.get("is_compliant", False) else "FAIL"
-        cells[2].text = str(result.get("extracted_text", "") or "No text detected")
-        cells[3].text = str(result.get("reason", ""))
-        cells[4].text = f"INR {int(result.get('penalty_amount', 0) or 0):,}"
+        cells[0].text = row_meta["label"]
+        cells[1].text = row_meta["statute"]
+        cells[2].text = row_meta["severity"]
+        cells[3].text = (
+            ("PASS" if result.get("is_compliant", False) else "FAIL")
+            if row_meta["in_scope"]
+            else "NOT ASSESSED"
+        )
+        cells[4].text = (
+            f"{str(result.get('reason', ''))}\n"
+            f"Read from pack: {str(result.get('extracted_text', '') or 'No text detected')}"
+        )
+        cells[5].text = f"INR {int(result.get('penalty_amount', 0) or 0):,}"
+
+    document.add_heading("Rule set applied", level=1)
+    document.add_paragraph(
+        f"Profile '{profile['profile_name']}', config fingerprint {profile['config_version']}. "
+        "Re-running this scan against the same fingerprint reproduces this report."
+    )
+    if profile["rules_out_of_scope"]:
+        document.add_paragraph(
+            "Declarations excluded by this profile and therefore not assessed: "
+            + ", ".join(row["declaration"] for row in profile["rules_out_of_scope"])
+        )
+    else:
+        document.add_paragraph("No declaration was excluded; the full Rule 6 set was assessed.")
 
     notes = str(scan_data.get("evidence_notes", "") or "").strip()
     review_reason = str(scan_data.get("review_reason", "") or "").strip()
@@ -262,6 +353,7 @@ def _generate_matplotlib_pdf(payload: dict[str, Any]) -> bytes:
 
     output = BytesIO()
     with PdfPages(output) as pdf:
+        profile = payload["rule_config"]
         lines: list[str] = [
             "LMPC Rule 6 Inspection Report",
             f"Generated: {payload['generated_at']}",
@@ -269,23 +361,39 @@ def _generate_matplotlib_pdf(payload: dict[str, Any]) -> bytes:
             f"Status: {payload['scan'].get('status', 'READY')}",
             f"Inspector: {payload['scan'].get('inspector_username', '') or 'Unknown'}",
             f"Product: {payload['scan'].get('product_name', '') or 'Not detected'}",
+            f"Rule profile: {profile['profile_name']} (config {profile['config_version']})",
             "",
-            f"Fields: {payload['summary']['passed_fields']} passed, "
+            f"Declarations: {payload['summary']['assessed_fields']} assessed, "
+            f"{payload['summary']['skipped_fields']} out of scope",
+            f"Assessed: {payload['summary']['passed_fields']} passed, "
             f"{payload['summary']['failed_fields']} failed",
+            f"Highest severity: {payload['summary']['highest_severity'] or 'None'}",
             f"Estimated penalty: INR {payload['summary']['estimated_penalty']:,}",
             "",
         ]
         for result in payload["results"]:
-            status = "PASS" if result.get("is_compliant", False) else "FAIL"
+            row_meta = rule_config.result_metadata(result)
+            status = (
+                ("PASS" if result.get("is_compliant", False) else "FAIL")
+                if row_meta["in_scope"]
+                else "NOT ASSESSED"
+            )
             lines.extend(
                 [
-                    f"{result.get('rule_class', '')}: {status}",
+                    f"{row_meta['label']}: {status} [{row_meta['severity']}]",
+                    f"Statutory basis: {row_meta['statute']}",
                     f"Extracted: {result.get('extracted_text', '') or 'No text detected'}",
                     f"Reason: {result.get('reason', '')}",
                     f"Penalty: INR {int(result.get('penalty_amount', 0) or 0):,}",
                     "",
                 ]
             )
+        if profile["rules_out_of_scope"]:
+            lines.extend([
+                "Excluded by this profile (not assessed):",
+                ", ".join(row["declaration"] for row in profile["rules_out_of_scope"]),
+                "",
+            ])
         if payload["scan"].get("evidence_notes"):
             lines.extend(["Inspector evidence notes:", str(payload["scan"]["evidence_notes"]), ""])
         if payload["scan"].get("review_reason"):
@@ -333,7 +441,7 @@ def generate_pdf_report(scan: dict[str, Any], generated_by: str = "") -> bytes:
     try:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
-        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import inch
         from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
     except ImportError:
@@ -347,12 +455,16 @@ def generate_pdf_report(scan: dict[str, Any], generated_by: str = "") -> bytes:
     story.append(Spacer(1, 10))
     scan_data = payload["scan"]
     summary = payload["summary"]
+    profile = payload["rule_config"]
     metadata = [
         ["Scan ID", str(scan_data.get("scan_id", "Draft"))],
         ["Status", str(scan_data.get("status", "READY"))],
         ["Inspector", str(scan_data.get("inspector_username", "") or "Unknown")],
         ["Product", str(scan_data.get("product_name", "") or "Not detected")],
+        ["Rule profile", f"{profile['profile_name']} (config {profile['config_version']})"],
+        ["Assessed / out of scope", f"{summary['assessed_fields']} / {summary['skipped_fields']}"],
         ["Passed / failed", f"{summary['passed_fields']} / {summary['failed_fields']}"],
+        ["Highest severity", str(summary["highest_severity"] or "None")],
         ["Estimated penalty", f"INR {summary['estimated_penalty']:,}"],
     ]
     metadata_table = Table(metadata, colWidths=[1.5 * inch, 5.2 * inch])
@@ -362,16 +474,32 @@ def generate_pdf_report(scan: dict[str, Any], generated_by: str = "") -> bytes:
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
     ]))
     story.extend([metadata_table, Spacer(1, 14), Paragraph("Compliance results", styles["Heading2"])])
-    rows = [["Rule", "Status", "Extracted text", "Reason", "Penalty"]]
+    cell = ParagraphStyle("lmpc_cell", parent=styles["BodyText"], fontSize=7, leading=8.5, spaceBefore=0, spaceAfter=0)
+    rows = [["Declaration", "Statutory basis", "Sev.", "Status", "Reason and extracted text", "Penalty"]]
     for result in payload["results"]:
+        row_meta = rule_config.result_metadata(result)
+        status = (
+            ("PASS" if result.get("is_compliant", False) else "FAIL")
+            if row_meta["in_scope"]
+            else "N/A"
+        )
         rows.append([
-            str(result.get("rule_class", "")),
-            "PASS" if result.get("is_compliant", False) else "FAIL",
-            str(result.get("extracted_text", "") or "No text detected"),
-            str(result.get("reason", "")),
+            Paragraph(_reportlab_text(row_meta["label"]), cell),
+            Paragraph(_reportlab_text(row_meta["statute"]), cell),
+            Paragraph(_reportlab_text(row_meta["severity"]), cell),
+            status,
+            Paragraph(
+                f"{_reportlab_text(result.get('reason', ''))}<br/><b>Read:</b> "
+                f"{_reportlab_text(result.get('extracted_text', '') or 'No text detected')}",
+                cell,
+            ),
             f"INR {int(result.get('penalty_amount', 0) or 0):,}",
         ])
-    result_table = Table(rows, colWidths=[1.0 * inch, 0.65 * inch, 2.0 * inch, 2.35 * inch, 0.7 * inch], repeatRows=1)
+    result_table = Table(
+        rows,
+        colWidths=[1.15 * inch, 1.45 * inch, 0.45 * inch, 0.55 * inch, 2.5 * inch, 0.6 * inch],
+        repeatRows=1,
+    )
     result_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#17365d")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -380,6 +508,20 @@ def generate_pdf_report(scan: dict[str, Any], generated_by: str = "") -> bytes:
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
     ]))
     story.append(result_table)
+    story.extend([Spacer(1, 10), Paragraph("Rule set applied", styles["Heading2"])])
+    story.append(Paragraph(
+        f"Profile '{_reportlab_text(profile['profile_name'])}', config fingerprint "
+        f"{_reportlab_text(profile['config_version'])}. Re-running this scan against the same "
+        "fingerprint reproduces this report.",
+        styles["Normal"],
+    ))
+    excluded = ", ".join(row["declaration"] for row in profile["rules_out_of_scope"])
+    story.append(Paragraph(
+        f"Excluded by this profile and not assessed: {_reportlab_text(excluded)}."
+        if excluded
+        else "No declaration was excluded; the full Rule 6 set was assessed.",
+        styles["Normal"],
+    ))
     if scan_data.get("evidence_notes"):
         story.extend([Spacer(1, 10), Paragraph("Inspector evidence notes", styles["Heading2"]), Paragraph(_reportlab_text(scan_data["evidence_notes"]), styles["Normal"])])
     if scan_data.get("review_reason"):

@@ -35,6 +35,6 @@ pygrabber>=0.2; sys_platform == "win32"
 pytest>=8.0
 
 # Optional production-like persistence and refresh-safe Streamlit sessions.
-# Set LMPC_DB_BACKEND=mysql to use XAMPP/MySQL; SQLite remains the offline fallback.
+# The application defaults to XAMPP/MySQL. SQLite is retained only for isolated tests.
 mysql-connector-python>=8.3
 streamlit-cookies-controller>=0.0.4

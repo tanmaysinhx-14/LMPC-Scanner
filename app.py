@@ -18,6 +18,7 @@ import db
 import debug_view
 import pipeline
 import local_camera
+import rule_config
 import session_cookie
 import webrtc_live
 from reporting import (
@@ -294,89 +295,110 @@ def _result_reason(rule_name: str, details: dict[str, Any]) -> str:
     return f"{rule_name} is missing, unreadable, or failed a configured compliance check."
 
 
+def _row_status(result: dict[str, Any], in_scope: bool) -> str:
+    if not in_scope:
+        return "NOT ASSESSED"
+    return "PASS" if result.get("is_compliant", False) else "FAIL"
+
+
 def _result_rows(results: dict | list) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     if isinstance(results, dict):
-        rows = []
-        for rule_name, details in results.items():
-            if not isinstance(details, dict):
-                continue
+        items = [
+            {"rule_class": rule_class, **details}
+            for rule_class, details in results.items()
+            if isinstance(details, dict)
+        ]
+    else:
+        items = [dict(result) for result in results if isinstance(result, dict)]
+    for item in items:
+        metadata = rule_config.result_metadata(item)
+        parsed_values = item.get("parsed_data")
+        if not isinstance(parsed_values, dict):
             parsed_values = {
                 key: value
-                for key, value in details.items()
-                if key not in {"extracted_text", "is_compliant", "penalty_amount", "reason"}
+                for key, value in item.items()
+                if key not in {"rule_class", "extracted_text", "is_compliant", "penalty_amount", "reason"}
             }
-            rows.append(
-                {
-                    "Rule class": rule_name,
-                    "Status": "PASS" if details.get("is_compliant", False) else "FAIL",
-                    "Extracted text": details.get("extracted_text") or "",
-                    "Parsed values": json.dumps(parsed_values, ensure_ascii=False, default=str),
-                    "Reason": _result_reason(rule_name, details),
-                    "Penalty": int(details.get("penalty_amount", 0) or 0),
-                }
-            )
-        return rows
-    rows = []
-    for result in results:
-        if not isinstance(result, dict):
-            continue
-        rule_name = str(result.get("rule_class", ""))
-        parsed_values = result.get("parsed_data", {})
         rows.append(
             {
-                "Rule class": rule_name,
-                "Status": "PASS" if result.get("is_compliant", False) else "FAIL",
-                "Extracted text": result.get("extracted_text", ""),
+                "Declaration": metadata["label"],
+                "Rule class": metadata["rule_class"],
+                "Status": _row_status(item, metadata["in_scope"]),
+                "Severity": metadata["severity"],
+                "Statutory basis": metadata["statute"],
+                "Extracted text": item.get("extracted_text") or "",
                 "Parsed values": json.dumps(parsed_values, ensure_ascii=False, default=str),
-                "Reason": _result_reason(rule_name, result),
-                "Penalty": int(result.get("penalty_amount", 0) or 0),
+                "Reason": _result_reason(metadata["label"], item),
+                "Penalty": int(item.get("penalty_amount", 0) or 0),
             }
         )
     return rows
 
 
 def _database_results(results: dict | list) -> list[dict[str, Any]]:
+    """Rows destined for ScanResults.
+
+    Out-of-scope classes are deliberately not written: storing them as passes
+    would inflate the compliance rate, and storing them as failures would invent
+    violations. The scan's rule_config snapshot records what was excluded.
+    """
+
     if isinstance(results, dict):
-        normalized = []
-        for rule_name, details in results.items():
-            if not isinstance(details, dict):
-                continue
+        items = [
+            {"rule_class": rule_class, **details}
+            for rule_class, details in results.items()
+            if isinstance(details, dict)
+        ]
+    else:
+        items = [dict(result) for result in results if isinstance(result, dict)]
+    normalized: list[dict[str, Any]] = []
+    for item in items:
+        rule_name = str(item.get("rule_class", ""))
+        if not rule_name:
+            continue
+        metadata = rule_config.result_metadata(item)
+        if not metadata["in_scope"]:
+            continue
+        parsed_data = item.get("parsed_data")
+        if not isinstance(parsed_data, dict):
             parsed_data = {
                 key: value
-                for key, value in details.items()
-                if key not in {"extracted_text", "is_compliant", "penalty_amount", "reason"}
+                for key, value in item.items()
+                if key not in {"rule_class", "extracted_text", "is_compliant", "penalty_amount", "reason"}
             }
-            normalized.append(
-                {
-                    "rule_class": rule_name,
-                    "extracted_text": str(details.get("extracted_text") or ""),
-                    "is_compliant": bool(details.get("is_compliant", False)),
-                    "penalty_amount": int(details.get("penalty_amount", 0) or 0),
-                    "reason": _result_reason(rule_name, details),
-                    "parsed_data": parsed_data,
-                }
-            )
-        return normalized
-    return [
-        {
-            "rule_class": str(result.get("rule_class", "")),
-            "extracted_text": str(result.get("extracted_text") or ""),
-            "is_compliant": bool(result.get("is_compliant", False)),
-            "penalty_amount": int(result.get("penalty_amount", 0) or 0),
-            "reason": _result_reason(str(result.get("rule_class", "")), result),
-            "parsed_data": result.get("parsed_data", {}),
-        }
-        for result in results
-        if isinstance(result, dict) and result.get("rule_class")
-    ]
+        normalized.append(
+            {
+                "rule_class": rule_name,
+                "extracted_text": str(item.get("extracted_text") or ""),
+                "is_compliant": bool(item.get("is_compliant", False)),
+                "penalty_amount": int(item.get("penalty_amount", 0) or 0),
+                "reason": _result_reason(metadata["label"], item),
+                "parsed_data": parsed_data,
+            }
+        )
+    return normalized
 
 
 def _scan_summary(results: dict | list) -> tuple[int, int, int]:
-    rows = _result_rows(results)
-    passed = sum(row["Status"] == "PASS" for row in rows)
-    failed = len(rows) - passed
-    penalty = sum(int(row["Penalty"]) for row in rows if row["Status"] == "FAIL")
-    return passed, failed, penalty
+    summary = rule_config.summarize(results)
+    return summary["passed"], summary["failed"], summary["penalty"]
+
+
+def _render_rule_profile_caption(scan: dict[str, Any]) -> None:
+    summary = rule_config.summarize(scan.get("results", []))
+    config = rule_config.normalize_config(scan.get("rule_config"))
+    excluded = [
+        entry["label"]
+        for entry in rule_config.RULE_CATALOGUE
+        if not config["rules"][entry["rule_class"]]["enabled"]
+    ]
+    st.caption(
+        f"Rule profile: **{config['profile_name']}** "
+        f"(config `{rule_config.config_version(config)}`) | "
+        f"{summary['assessed']} declaration(s) assessed, {summary['skipped']} out of scope"
+        + (f" | Excluded: {', '.join(excluded)}" if excluded else "")
+    )
 
 
 def _render_scan_results(results: dict | list) -> None:
@@ -385,9 +407,11 @@ def _render_scan_results(results: dict | list) -> None:
         st.warning("No rule results are available for this scan.")
         return
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-    for index, row in enumerate(rows):
-        label = f"{'✅' if row['Status'] == 'PASS' else '⚠️'} {row['Rule class']} — {row['Status']}"
+    icons = {"PASS": "✅", "FAIL": "⚠️", "NOT ASSESSED": "➖"}
+    for row in rows:
+        label = f"{icons.get(row['Status'], '•')} {row['Declaration']} — {row['Status']}"
         with st.expander(label, expanded=row["Status"] == "FAIL"):
+            st.write(f"**Statutory basis:** {row['Statutory basis']} · **Severity:** {row['Severity']}")
             st.write(f"**Extracted text:** {row['Extracted text'] or 'No text detected'}")
             st.write(f"**Reason:** {row['Reason']}")
             if row["Parsed values"] not in {"{}", "null", ""}:
@@ -397,6 +421,8 @@ def _render_scan_results(results: dict | list) -> None:
                     st.code(row["Parsed values"])
             if row["Status"] == "FAIL":
                 st.error(f"Estimated first-offense penalty: INR {row['Penalty']:,}")
+            elif row["Status"] == "NOT ASSESSED":
+                st.info("This declaration is out of scope for the active rule profile.")
             else:
                 st.success("Declaration passed the configured checks.")
 
@@ -508,13 +534,19 @@ def _run_analysis(
     _remove_temporary_image(st.session_state.current_scan)
     suffixes = [Path(name).suffix for name in image_names]
     temporary_paths: list[Path] = []
+    active_config = db.get_active_rule_config()
     try:
         temporary_paths = _save_temporary_image(image_bytes_list, suffixes)
         with st.spinner("Running YOLO detection, OCR across prepared crop variants, and rule validation..."):
             scan = pipeline.analyze_images(
                 image_bytes_list, backend_name=st.session_state.get("ocr_backend_choice")
             )
-            results = validate_compliance(scan.extracted, scan.dietary_status)
+            # The engine decides the verdict on what was read; the active profile
+            # decides scope, severity and money. Never the other way round.
+            results = rule_config.apply_rule_config(
+                validate_compliance(scan.extracted, scan.dietary_status),
+                active_config,
+            )
     except Exception as error:
         _remove_temporary_image({"temporary_paths": [str(path) for path in temporary_paths]})
         st.error(f"Analysis failed: {error}")
@@ -526,6 +558,7 @@ def _run_analysis(
         "extracted_data": scan.extracted,
         "detections_by_image": scan.detections_by_image,
         "results": results,
+        "rule_config": active_config,
         "evidence_notes": st.session_state.inspector_evidence_notes,
         "status": "READY",
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -681,6 +714,7 @@ def _render_inspector() -> None:
     second.metric("Fields requiring attention", failed)
     third.metric("Estimated penalty", f"INR {penalty:,}")
     fourth.metric("Evidence images", len(_image_paths_for_scan(current_scan)))
+    _render_rule_profile_caption(current_scan)
     if current_scan.get("ocr_backend"):
         st.caption(
             f"Source: {current_scan.get('capture_source', 'upload')} | "
@@ -726,6 +760,7 @@ def _render_inspector() -> None:
                         [str(path) for path in persistent_paths],
                         _database_results(current_scan["results"]),
                         evidence_notes=current_scan.get("evidence_notes", ""),
+                        rule_config_snapshot=current_scan.get("rule_config"),
                     )
                 except Exception as error:
                     st.error(f"Submission failed: {error}")
@@ -756,6 +791,7 @@ def _render_verifier_scan(scan: dict[str, Any], show_actions: bool = True) -> No
     )
     with st.expander(title, expanded=show_actions):
         st.caption(f"Captured: {scan['timestamp']} | Evidence: {len(_image_paths_for_scan(scan))} image(s)")
+        _render_rule_profile_caption(scan)
         _render_evidence(scan)
         _render_scan_results(scan["results"])
         report_columns = st.columns([1, 1, 1, 1])
@@ -964,6 +1000,101 @@ def _render_admin_users() -> None:
                 st.rerun()
 
 
+def _render_admin_rule_config() -> None:
+    st.subheader("Legal Metrology rule configuration")
+    active = db.get_active_rule_config()
+    st.caption(
+        f"Active profile: **{active['profile_name']}** "
+        f"(config `{rule_config.config_version(active)}`). "
+        "Scans already submitted keep the profile they were judged under; a change here "
+        "applies to the next scan onwards."
+    )
+    st.info(
+        "Scope, severity and penalty are configurable. Whether a declaration passes is decided "
+        "by the parsers in rule_engine.py from the text read off the pack, and no setting here "
+        "can override that verdict. Penalties are capped at the Legal Metrology Act 2009, "
+        f"s. 36(1) first-offence ceiling of INR {rule_config.STATUTORY_PENALTY_CEILING:,}."
+    )
+
+    profile_name = st.text_input(
+        "Profile name",
+        value=active["profile_name"],
+        key="rule_config_profile_name",
+        help="Recorded on every report generated while this profile is active.",
+    )
+    edited = st.data_editor(
+        pd.DataFrame(rule_config.config_rows(active)),
+        key="rule_config_editor",
+        use_container_width=True,
+        hide_index=True,
+        num_rows="fixed",
+        disabled=[
+            rule_config.EDITOR_COLUMNS["rule_class"],
+            rule_config.EDITOR_COLUMNS["label"],
+            rule_config.EDITOR_COLUMNS["statute"],
+        ],
+        column_config={
+            rule_config.EDITOR_COLUMNS["enabled"]: st.column_config.CheckboxColumn(
+                rule_config.EDITOR_COLUMNS["enabled"],
+                help="Unchecked declarations are reported as not assessed instead of as failures.",
+            ),
+            rule_config.EDITOR_COLUMNS["severity"]: st.column_config.SelectboxColumn(
+                rule_config.EDITOR_COLUMNS["severity"],
+                options=list(rule_config.SEVERITIES),
+                required=True,
+            ),
+            rule_config.EDITOR_COLUMNS["penalty"]: st.column_config.NumberColumn(
+                rule_config.EDITOR_COLUMNS["penalty"],
+                min_value=0,
+                max_value=rule_config.STATUTORY_PENALTY_CEILING,
+                step=1_000,
+                format="%d",
+            ),
+        },
+    )
+
+    candidate = rule_config.config_from_rows(edited, profile_name)
+    changes = rule_config.config_diff(candidate, active)
+    if changes:
+        st.warning("Unsaved changes: " + "; ".join(changes))
+    else:
+        st.caption("No unsaved changes against the active profile.")
+
+    left, right = st.columns([1, 1])
+    with left:
+        if st.button("Activate this profile", type="primary", use_container_width=True):
+            try:
+                saved = db.save_rule_config(st.session_state.user_id, candidate)
+            except Exception as error:
+                st.error(str(error))
+            else:
+                st.success(
+                    f"Profile '{saved['config']['profile_name']}' activated "
+                    f"as config {saved['config_version']}."
+                )
+                st.rerun()
+    with right:
+        if st.button("Restore shipped defaults", use_container_width=True):
+            try:
+                saved = db.save_rule_config(st.session_state.user_id, rule_config.default_config())
+            except Exception as error:
+                st.error(str(error))
+            else:
+                st.success(f"Shipped defaults reactivated as config {saved['config_version']}.")
+                st.rerun()
+
+    st.subheader("Profile version history")
+    history = db.get_rule_config_history(st.session_state.user_id)
+    if history:
+        st.dataframe(pd.DataFrame(history), use_container_width=True, hide_index=True)
+        st.caption(
+            "Superseded versions are retained so any report citing a config fingerprint "
+            "can be traced back to the exact rule text."
+        )
+    else:
+        st.info("No profile has been saved yet; scans run against the shipped defaults.")
+
+
 def _render_admin() -> None:
     st.header("Admin control center")
     analytics = db.get_analytics(st.session_state.user_id)
@@ -973,9 +1104,11 @@ def _render_admin() -> None:
     third.metric("Violations", analytics["total_violations"])
     fourth.metric("Failure rate", f"{analytics['compliance_failure_rate']:.1f}%")
     fifth.metric("Potential penalty", f"INR {analytics['total_potential_penalty_revenue']:,}")
-    st.caption(f"{analytics['active_users']} active user account(s) | SQLite audit store: {db.DB_PATH.name}")
+    st.caption(f"{analytics['active_users']} active user account(s) | {db.database_description()}")
 
-    tabs = st.tabs(["Inspection history", "Analytics", "Users and roles", "Audit events"])
+    tabs = st.tabs(
+        ["Inspection history", "Analytics", "Rule configuration", "Users and roles", "Audit events"]
+    )
     with tabs[0]:
         _render_admin_history()
         st.subheader("Raw Scans table")
@@ -1018,8 +1151,10 @@ def _render_admin() -> None:
             key="admin_results_csv",
         )
     with tabs[2]:
-        _render_admin_users()
+        _render_admin_rule_config()
     with tabs[3]:
+        _render_admin_users()
+    with tabs[4]:
         events = db.get_audit_events(st.session_state.user_id)
         if events:
             st.dataframe(pd.DataFrame(events), use_container_width=True, hide_index=True)
@@ -1039,7 +1174,7 @@ def main() -> None:
         st.code(db.DATABASE_INIT_ERROR or "Unknown database initialization error")
         st.info(
             "For XAMPP, start MySQL and check LMPC_MYSQL_HOST/PORT/USER/PASSWORD, "
-            "or unset LMPC_DB_BACKEND to use the local SQLite fallback."
+            "and verify that MySQL is running in XAMPP."
         )
         return
     _initialize_session_state()
@@ -1058,6 +1193,11 @@ def main() -> None:
         if st.session_state.role == "Inspector":
             st.divider()
             _render_engine_controls()
+            active_profile = db.get_active_rule_config()
+            st.caption(
+                f"Rule profile: {active_profile['profile_name']} "
+                f"(`{rule_config.config_version(active_profile)}`)"
+            )
             st.divider()
         if st.button("Sign out", use_container_width=True):
             _logout()

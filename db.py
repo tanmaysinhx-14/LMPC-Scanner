@@ -12,6 +12,8 @@ import secrets
 import sqlite3
 from typing import Any, Iterator
 
+import rule_config
+
 
 DB_PATH = Path(__file__).resolve().with_name("lmpc_scanner.db")
 ALLOWED_ROLES = ("Inspector", "Verifier", "Admin")
@@ -24,11 +26,11 @@ MYSQL_DATABASE_RE = re.compile(r"^[A-Za-z0-9_]+$")
 def database_backend() -> str:
     """Return the configured persistence backend.
 
-    SQLite remains the safe default for an offline demo. Set
-    ``LMPC_DB_BACKEND=mysql`` to use the XAMPP/MySQL connection settings below.
+    XAMPP/MySQL is the default persistence backend. Set ``LMPC_DB_BACKEND=sqlite``
+    only for an explicitly requested local test environment.
     """
 
-    value = os.environ.get("LMPC_DB_BACKEND", "sqlite").strip().lower()
+    value = os.environ.get("LMPC_DB_BACKEND", "mysql").strip().lower()
     return "mysql" if value in {"mysql", "mariadb", "xampp"} else "sqlite"
 
 
@@ -246,6 +248,7 @@ def _ensure_column(
                 ("Scans", "reviewer_id"): "BIGINT UNSIGNED NULL",
                 ("Scans", "reviewed_at"): "VARCHAR(40) NULL",
                 ("Scans", "review_reason"): "TEXT NOT NULL",
+                ("Scans", "rule_config"): "LONGTEXT NOT NULL",
                 ("ScanResults", "reason"): "TEXT NOT NULL",
                 ("ScanResults", "parsed_data"): "LONGTEXT NOT NULL",
             }
@@ -332,6 +335,18 @@ _SQLITE_SCHEMA = """
             );
             CREATE INDEX IF NOT EXISTS idx_session_tokens_user ON SessionTokens(user_id);
             CREATE INDEX IF NOT EXISTS idx_session_tokens_expiry ON SessionTokens(expires_at);
+
+            CREATE TABLE IF NOT EXISTS RuleConfigs (
+                config_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_name TEXT NOT NULL DEFAULT '',
+                config_version TEXT NOT NULL DEFAULT '',
+                payload TEXT NOT NULL DEFAULT '{}',
+                is_active INTEGER NOT NULL DEFAULT 0 CHECK (is_active IN (0, 1)),
+                created_by INTEGER,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (created_by) REFERENCES Users(user_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_rule_configs_active ON RuleConfigs(is_active);
 """
 
 
@@ -402,6 +417,18 @@ _MYSQL_SCHEMA = """
                 INDEX idx_session_tokens_expiry (expires_at)
             ) ENGINE=InnoDB;
 
+            CREATE TABLE IF NOT EXISTS RuleConfigs (
+                config_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                profile_name VARCHAR(120) NOT NULL DEFAULT '',
+                config_version VARCHAR(32) NOT NULL DEFAULT '',
+                payload LONGTEXT NOT NULL,
+                is_active TINYINT(1) NOT NULL DEFAULT 0,
+                created_by BIGINT UNSIGNED NULL,
+                created_at VARCHAR(40) NOT NULL,
+                CONSTRAINT fk_rule_config_user FOREIGN KEY (created_by) REFERENCES Users(user_id),
+                INDEX idx_rule_configs_active (is_active)
+            ) ENGINE=InnoDB;
+
 """
 
 
@@ -417,6 +444,7 @@ def initialize_database() -> None:
         _ensure_column(connection, "Scans", "reviewer_id", "INTEGER")
         _ensure_column(connection, "Scans", "reviewed_at", "TEXT")
         _ensure_column(connection, "Scans", "review_reason", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(connection, "Scans", "rule_config", "TEXT NOT NULL DEFAULT '{}'")
         _ensure_column(connection, "ScanResults", "reason", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(connection, "ScanResults", "parsed_data", "TEXT NOT NULL DEFAULT '{}'")
 
@@ -724,6 +752,99 @@ def set_user_active(actor_id: int, user_id: int, active: bool) -> bool:
     return True
 
 
+def get_active_rule_config() -> dict[str, Any]:
+    """The profile every new scan is judged against.
+
+    Falls back to the shipped defaults when no admin has saved a profile yet, so
+    a fresh install inspects against full Rule 6 rather than against nothing.
+    """
+
+    initialize_database()
+    with _connection() as connection:
+        row = connection.execute(
+            """
+            SELECT payload FROM RuleConfigs
+            WHERE is_active = 1
+            ORDER BY config_id DESC
+            """
+        ).fetchone()
+    if row is None:
+        return rule_config.default_config()
+    return rule_config.normalize_config(row["payload"])
+
+
+def get_rule_config_history(actor_id: int, limit: int = 20) -> list[dict[str, Any]]:
+    initialize_database()
+    with _connection() as connection:
+        _require_roles(connection, actor_id, ("Admin",))
+        rows = connection.execute(
+            """
+            SELECT c.config_id, c.profile_name, c.config_version, c.is_active,
+                   c.created_at, u.username AS created_by
+            FROM RuleConfigs AS c
+            LEFT JOIN Users AS u ON u.user_id = c.created_by
+            ORDER BY c.config_id DESC
+            LIMIT ?
+            """,
+            (max(1, int(limit)),),
+        ).fetchall()
+    return [
+        {
+            "config_id": int(row["config_id"]),
+            "profile_name": str(row["profile_name"] or ""),
+            "config_version": str(row["config_version"] or ""),
+            "active": bool(row["is_active"]),
+            "created_at": str(row["created_at"] or ""),
+            "created_by": str(row["created_by"] or "unknown"),
+        }
+        for row in rows
+    ]
+
+
+def save_rule_config(actor_id: int, config: Any) -> dict[str, Any]:
+    """Activate a new profile version. Admin only, and never destructive.
+
+    Superseded versions stay in the table with ``is_active = 0`` so a report that
+    cites a config fingerprint can always be traced back to the profile text.
+    """
+
+    normalized = rule_config.normalize_config(config)
+    version = rule_config.config_version(normalized)
+    initialize_database()
+    with _connection() as connection:
+        actor = _require_roles(connection, actor_id, ("Admin",))
+        connection.execute("UPDATE RuleConfigs SET is_active = 0 WHERE is_active = 1")
+        cursor = connection.execute(
+            """
+            INSERT INTO RuleConfigs
+                (profile_name, config_version, payload, is_active, created_by, created_at)
+            VALUES (?, ?, ?, 1, ?, ?)
+            """,
+            (
+                normalized["profile_name"],
+                version,
+                _json_text(normalized, "{}"),
+                int(actor["user_id"]),
+                _now(),
+            ),
+        )
+        changes = rule_config.config_diff(normalized)
+        connection.execute(
+            """
+            INSERT INTO AuditEvents (actor_id, action, details, timestamp)
+            VALUES (?, 'UPDATE_RULE_CONFIG', ?, ?)
+            """,
+            (
+                int(actor["user_id"]),
+                f"Activated rule profile '{normalized['profile_name']}' ({version}); "
+                + (", ".join(changes) if changes else "matches shipped defaults"),
+                _now(),
+            ),
+        )
+        config_id = int(cursor.lastrowid)
+    return {"config_id": config_id, "config_version": version, "config": normalized}
+
+
 def _json_text(value: Any, fallback: str) -> str:
     try:
         return json.dumps(value, ensure_ascii=False, default=str)
@@ -832,9 +953,14 @@ def insert_scan(
     image_paths: list[str],
     results_dict: Any,
     evidence_notes: str = "",
+    rule_config_snapshot: Any = None,
 ) -> int:
     normalized_image_paths = _normalize_image_paths(image_paths)
     normalized_results = _normalize_results(results_dict)
+    snapshot = rule_config.normalize_config(
+        rule_config_snapshot if rule_config_snapshot is not None else get_active_rule_config()
+    )
+    snapshot_text = _json_text(snapshot, "{}")
     image_hashes = [_hash_file(path) for path in normalized_image_paths]
     product_name = ""
     for result in normalized_results:
@@ -848,8 +974,8 @@ def insert_scan(
             """
             INSERT INTO Scans
                 (inspector_id, image_path, status, timestamp, product_name,
-                 evidence_notes, evidence_hashes)
-            VALUES (?, ?, 'PENDING', ?, ?, ?, ?)
+                 evidence_notes, evidence_hashes, rule_config)
+            VALUES (?, ?, 'PENDING', ?, ?, ?, ?, ?)
             """,
             (
                 int(inspector_id),
@@ -858,6 +984,7 @@ def insert_scan(
                 product_name,
                 str(evidence_notes or "").strip(),
                 _json_text(image_hashes, "[]"),
+                snapshot_text,
             ),
         )
         scan_id = int(cursor.lastrowid)
@@ -889,7 +1016,9 @@ def insert_scan(
             (
                 int(inspector["user_id"]),
                 scan_id,
-                f"Submitted {len(normalized_image_paths)} evidence image(s)",
+                f"Submitted {len(normalized_image_paths)} evidence image(s) "
+                f"against rule profile '{snapshot['profile_name']}' "
+                f"({rule_config.config_version(snapshot)})",
                 _now(),
             ),
         )
@@ -916,6 +1045,7 @@ def _scan_from_rows(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
                 "reviewer_id": int(row["reviewer_id"]) if row["reviewer_id"] else None,
                 "reviewed_at": str(row["reviewed_at"] or ""),
                 "review_reason": str(row["review_reason"] or ""),
+                "rule_config": rule_config.normalize_config(row["rule_config"]),
                 "results": [],
             },
         )
@@ -944,7 +1074,7 @@ def _scan_select() -> str:
         SELECT s.scan_id, s.inspector_id, u.username AS inspector_username,
                s.image_path, s.evidence_hashes, s.product_name,
                s.evidence_notes, s.status, s.timestamp, s.reviewer_id,
-               s.reviewed_at, s.review_reason,
+               s.reviewed_at, s.review_reason, s.rule_config,
                r.result_id, r.rule_class, r.extracted_text,
                r.is_compliant, r.penalty_amount, r.reason, r.parsed_data
         FROM Scans AS s
